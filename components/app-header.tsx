@@ -23,6 +23,11 @@ export function AppHeader({
     return href === pathname;
   }
 
+  function startTour() {
+    setMenuOpen(false);
+    window.dispatchEvent(new Event("payment-follow-up:start-tour"));
+  }
+
   return (
     <header className="border-b border-zinc-200 bg-white px-4 py-4 sm:px-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -31,11 +36,20 @@ export function AppHeader({
             <p className="text-sm font-medium">Payment Follow-Up</p>
             <p className="text-xs text-zinc-500">{email}</p>
           </div>
-          <form action={signOutAction} className="hidden lg:block">
-            <button className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm">
-              Sign out
+          <div className="hidden items-center gap-2 lg:flex">
+            <button
+              type="button"
+              onClick={startTour}
+              className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700 transition hover:border-zinc-900 hover:text-zinc-900"
+            >
+              Tour
             </button>
-          </form>
+            <form action={signOutAction}>
+              <button className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm">
+                Sign out
+              </button>
+            </form>
+          </div>
           <div className="lg:hidden">
             <button
               type="button"
@@ -67,6 +81,13 @@ export function AppHeader({
       </div>
       {menuOpen ? (
         <div className="mt-3 grid gap-2 lg:hidden">
+          <button
+            type="button"
+            onClick={startTour}
+            className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left text-sm text-zinc-700 transition hover:border-zinc-900 hover:text-zinc-900"
+          >
+            Tour
+          </button>
           {links.map((link) => (
             <Link
               key={link.href}

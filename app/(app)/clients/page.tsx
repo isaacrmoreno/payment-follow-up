@@ -30,12 +30,17 @@ export default async function ClientsPage() {
 
   return (
     <div className="space-y-8">
-      <section className="flex items-center justify-between rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
+      <section
+        id="tour-clients-header"
+        className="flex items-center justify-between rounded-md border border-zinc-200 bg-white p-4 shadow-sm"
+      >
         <h1 className="text-lg font-semibold">Clients</h1>
-        <ClientDialog />
+        <div id="tour-add-client">
+          <ClientDialog />
+        </div>
       </section>
 
-      <section className="space-y-3">
+      <section id="tour-clients-list" className="space-y-3">
         <div className="grid gap-3 md:hidden">
           {(clients ?? []).map((client) => (
             <article key={client.id} className="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">

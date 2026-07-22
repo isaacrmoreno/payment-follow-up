@@ -146,18 +146,23 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
 
   return (
     <div className="space-y-8">
-      <section className="flex items-center justify-between rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
+      <section
+        id="tour-invoices-header"
+        className="flex items-center justify-between rounded-md border border-zinc-200 bg-white p-4 shadow-sm"
+      >
         <h1 className="text-lg font-semibold">Invoices</h1>
-        <InvoiceDialog
-          clients={clients ?? []}
-          cadence={cadence}
-          sendTime={sendTime}
-        />
+        <div id="tour-add-invoice">
+          <InvoiceDialog
+            clients={clients ?? []}
+            cadence={cadence}
+            sendTime={sendTime}
+          />
+        </div>
       </section>
 
       <section className="space-y-3">
-        <div className="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm">
-          <div className="border-b border-zinc-200 px-4 py-3">
+        <div id="tour-invoice-list" className="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm">
+          <div id="tour-invoice-filters" className="border-b border-zinc-200 px-4 py-3">
             <div className="flex flex-wrap gap-2">
               {filters.map((filter) => (
                 <Link

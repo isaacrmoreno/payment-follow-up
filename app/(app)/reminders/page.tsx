@@ -37,19 +37,26 @@ export default async function RemindersPage() {
 
   return (
     <div className="space-y-8">
-      <section className="flex items-center justify-between rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
+      <section
+        id="tour-reminders-header"
+        className="flex items-center justify-between rounded-md border border-zinc-200 bg-white p-4 shadow-sm"
+      >
         <h1 className="text-lg font-semibold">Reminders</h1>
-        <ReminderCadenceDialog
-          cadence={cadence}
-          sendTime={sendTime}
-          hideSummary
-          triggerLabel="Edit cadence"
-          triggerClassName="inline-flex items-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800"
-        />
+        <div id="tour-edit-cadence">
+          <ReminderCadenceDialog
+            cadence={cadence}
+            sendTime={sendTime}
+            hideSummary
+            triggerLabel="Edit cadence"
+            triggerClassName="inline-flex items-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800"
+          />
+        </div>
       </section>
 
       {starterTemplates.length ? (
-        <TemplateList templates={starterTemplates} />
+        <div id="tour-template-list">
+          <TemplateList templates={starterTemplates} />
+        </div>
       ) : (
         <div className="rounded-md border border-zinc-200 bg-white p-4 text-sm text-zinc-600 shadow-sm">
           No templates yet.
