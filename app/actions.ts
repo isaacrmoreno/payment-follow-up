@@ -36,6 +36,41 @@ export async function signOutAction() {
   revalidatePath("/");
 }
 
+export async function updateProfileAction(formData: FormData) {
+  const user = await requireUser();
+  const supabase = await createSupabaseServerClient();
+  const fullName = String(formData.get("full_name") ?? "").trim() || null;
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      full_name: fullName,
+    })
+    .eq("id", user.id);
+  assertDbError(error, "Unable to update profile");
+
+  revalidatePath("/settings");
+  revalidatePath("/");
+}
+
+export async function updatePreferencesAction(formData: FormData) {
+  const user = await requireUser();
+  const supabase = await createSupabaseServerClient();
+  const payload = {
+    user_id: user.id,
+    business_name: String(formData.get("business_name") ?? "").trim() || null,
+    reply_to_email: String(formData.get("reply_to_email") ?? "").trim() || null,
+    timezone: String(formData.get("timezone") ?? "").trim() || "America/Los_Angeles",
+    reminder_cadence: String(formData.get("reminder_cadence") ?? "").trim() || "manual",
+    follow_up_interval_days: Number(String(formData.get("follow_up_interval_days") ?? "3").trim() || 3),
+    invoice_footer: String(formData.get("invoice_footer") ?? "").trim() || null,
+  };
+
+  const { error } = await supabase.from("user_preferences").upsert(payload);
+  assertDbError(error, "Unable to update preferences");
+  revalidatePath("/settings");
+}
+
 export async function upsertClientAction(formData: FormData) {
   const user = await requireUser();
   const supabase = await createSupabaseServerClient();
@@ -63,6 +98,15 @@ export async function upsertClientAction(formData: FormData) {
 export async function deleteClientAction(formData: FormData) {
   const id = String(formData.get("id") ?? "").trim();
   const supabase = await createSupabaseServerClient();
+  const { count } = await supabase
+    .from("invoices")
+    .select("id", { count: "exact", head: true })
+    .eq("client_id", id);
+
+  if ((count ?? 0) > 0) {
+    throw new Error("Delete the client's invoices first before removing this client.");
+  }
+
   const { error } = await supabase.from("clients").delete().eq("id", id);
   assertDbError(error, "Unable to delete client");
   revalidatePath("/");
@@ -73,9 +117,10 @@ export async function upsertInvoiceAction(formData: FormData) {
   const user = await requireUser();
   const supabase = await createSupabaseServerClient();
   const id = String(formData.get("id") ?? "").trim();
+  const clientId = String(formData.get("client_id") ?? "").trim();
   const payload = {
     user_id: user.id,
-    client_id: String(formData.get("client_id") ?? "").trim(),
+    client_id: clientId,
     invoice_number: String(formData.get("invoice_number") ?? "").trim() || null,
     title: String(formData.get("title") ?? "").trim(),
     amount_due: toNumber(formData, "amount_due") ?? 0,
@@ -87,6 +132,10 @@ export async function upsertInvoiceAction(formData: FormData) {
     external_reference: String(formData.get("external_reference") ?? "").trim() || null,
     next_follow_up_at: String(formData.get("next_follow_up_at") ?? "").trim() || null,
   };
+
+  if (!clientId) {
+    throw new Error("Client is required");
+  }
 
   if (id) {
     const { error } = await supabase.from("invoices").update(payload).eq("id", id);
