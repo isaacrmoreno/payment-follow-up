@@ -41,10 +41,10 @@ export default async function ClientsPage() {
       </section>
 
       <section id="tour-clients-list" className="space-y-3">
-        <div className="rounded-md border border-zinc-200 bg-white p-3 shadow-sm md:hidden">
-          <div className="grid gap-3">
+        <div className="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm md:hidden">
+          <div className="divide-y divide-zinc-200">
             {(clients ?? []).map((client) => (
-              <article key={client.id} className="rounded-md border border-zinc-200 bg-white p-4">
+              <article key={client.id} className="bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="truncate text-base font-semibold text-zinc-950">{titleCaseWords(client.name)}</h3>
@@ -69,7 +69,7 @@ export default async function ClientsPage() {
               </article>
             ))}
             {!clients?.length ? (
-              <div className="rounded-md border border-zinc-200 bg-white p-4 text-sm text-zinc-500">
+              <div className="p-4 text-sm text-zinc-500">
                 No clients yet.
               </div>
             ) : null}
