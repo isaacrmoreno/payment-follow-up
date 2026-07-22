@@ -45,7 +45,7 @@ export function AppHeader({
               Tour
             </button>
             <form action={signOutAction}>
-              <button className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm">
+              <button className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700">
                 Sign out
               </button>
             </form>
@@ -105,7 +105,7 @@ export function AppHeader({
             </Link>
           ))}
           <form action={signOutAction}>
-            <button className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left text-sm text-zinc-700 transition hover:border-zinc-900 hover:text-zinc-900">
+            <button className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left text-sm text-zinc-700 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700">
               Sign out
             </button>
           </form>

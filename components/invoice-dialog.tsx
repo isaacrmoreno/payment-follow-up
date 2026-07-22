@@ -328,7 +328,7 @@ export function InvoiceDialog({
                 max={REMINDER_SEND_TIME_MAX}
                 value={sendAt}
                 onChange={(event) => setSendAt(event.target.value)}
-                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 shadow-sm outline-none transition focus:border-zinc-900"
+                className="block w-full min-w-0 appearance-none rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none transition focus:border-zinc-900"
               />
               <p className="text-xs text-zinc-500">Current send time: {formatTimeLabel(sendAt)}</p>
             </label>

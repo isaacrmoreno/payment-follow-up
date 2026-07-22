@@ -167,13 +167,13 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
       <section className="space-y-3">
         <div id="tour-invoice-list" className="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm">
           <div id="tour-invoice-filters" className="border-b border-zinc-200 px-4 py-3">
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
               {filters.map((filter) => (
                 <Link
                   key={filter.id}
                   href={filter.id === "open" ? "/invoices" : `/invoices?status=${filter.id}`}
                   className={[
-                    "rounded-md border px-3 py-1.5 text-sm transition",
+                    "rounded-md border px-3 py-1.5 text-center text-sm transition sm:text-left",
                     selectedFilter === filter.id
                       ? "border-zinc-900 bg-zinc-900 text-white"
                       : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-900 hover:text-zinc-900",
@@ -208,19 +208,19 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
                       <dt className="font-medium text-zinc-900">Remaining</dt>
                       <dd>{invoice.previewMeta.amountDue}</dd>
                     </div>
-                  <div>
-                    <dt className="font-medium text-zinc-900">Reminders</dt>
-                    <dd>{invoice.reminders.length}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-medium text-zinc-900">Next send</dt>
-                    <dd>
-                      {invoice.previewMeta.nextScheduledReminder
-                        ? `${formatInvoiceDate(invoice.previewMeta.nextScheduledReminder.date)} · ${formatTimeLabel(invoice.previewMeta.sendTime)}`
-                        : "Complete"}
-                    </dd>
-                  </div>
-                </dl>
+                    <div>
+                      <dt className="font-medium text-zinc-900">Reminders</dt>
+                      <dd>{invoice.reminders.length}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-zinc-900">Next send</dt>
+                      <dd>
+                        {invoice.previewMeta.nextScheduledReminder
+                          ? `${formatInvoiceDate(invoice.previewMeta.nextScheduledReminder.date)} · ${formatTimeLabel(invoice.previewMeta.sendTime)}`
+                          : "Complete"}
+                      </dd>
+                    </div>
+                  </dl>
 
                   <div className="mt-3">
                     <InvoiceActions
