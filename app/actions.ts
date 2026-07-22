@@ -109,7 +109,7 @@ export async function markInvoicePaidAction(formData: FormData) {
   revalidatePath("/invoices");
 }
 
-export async function sendReminderAction(formData: FormData) {
+export async function sendReminderAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   const invoiceId = String(formData.get("invoice_id") ?? "").trim();
   const supabase = await createSupabaseServerClient();
@@ -121,11 +121,11 @@ export async function sendReminderAction(formData: FormData) {
     .single();
 
   if (!invoice) {
-    return { error: "Invoice not found" };
+    throw new Error("Invoice not found");
   }
 
   if (!invoice.clients?.email) {
-    return { error: "Client email is required to send a reminder" };
+    throw new Error("Client email is required to send a reminder");
   }
 
   const amountDue = Number(invoice.amount_due) - Number(invoice.amount_paid);
@@ -147,7 +147,7 @@ export async function sendReminderAction(formData: FormData) {
   });
 
   if (emailError) {
-    return { error: emailError.message };
+    throw new Error(emailError.message);
   }
 
   await supabase.from("reminders").insert({
@@ -171,6 +171,4 @@ export async function sendReminderAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/invoices");
-
-  return { error: null };
 }
