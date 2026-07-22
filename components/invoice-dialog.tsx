@@ -6,13 +6,16 @@ import { PendingButton } from "@/components/pending-button";
 import { CurrencyInput } from "@/components/currency-input";
 import { TitleInput } from "@/components/title-input";
 import { useToast } from "@/components/toast";
-import { formatInvoiceDate } from "@/lib/date";
+import { formatInvoiceDate, formatTimeLabel } from "@/lib/date";
 import { titleCaseWords } from "@/lib/labels";
 import {
   type ReminderCadenceOffsets,
   getInvoiceReminderCadence,
   getInvoiceReminderSendTime,
+  isAllowedReminderSendTime,
   REMINDER_PLAN_OPTIONS,
+  REMINDER_SEND_TIME_MAX,
+  REMINDER_SEND_TIME_MIN,
   parseReminderPlan,
   scheduleReminderPlan,
 } from "@/lib/reminders";
@@ -75,9 +78,17 @@ export function InvoiceDialog({
   const [reminderPlan, setReminderPlan] = useState(invoice?.reminder_plan ?? "soft_firm_final");
   const effectiveCadence = getInvoiceReminderCadence(invoice, cadence);
   const effectiveSendTime = getInvoiceReminderSendTime(invoice, sendTime);
+  const [softDays, setSoftDays] = useState(String(effectiveCadence.soft));
+  const [firmDays, setFirmDays] = useState(String(effectiveCadence.firm));
+  const [finalDays, setFinalDays] = useState(String(effectiveCadence.final));
+  const [sendAt, setSendAt] = useState(effectiveSendTime);
 
   const scheduledReminders = dueDate
-    ? scheduleReminderPlan(dueDate, parseReminderPlan(reminderPlan), effectiveCadence, effectiveSendTime)
+    ? scheduleReminderPlan(dueDate, parseReminderPlan(reminderPlan), {
+        soft: Number(softDays || 0),
+        firm: Number(firmDays || 0),
+        final: Number(finalDays || 0),
+      }, sendAt)
     : [];
 
   function resetForm() {
@@ -87,6 +98,10 @@ export function InvoiceDialog({
     setAmountDue(String(invoice?.amount_due ?? "0"));
     setPaymentLink(invoice?.external_reference ?? "");
     setReminderPlan(invoice?.reminder_plan ?? "soft_firm_final");
+    setSoftDays(String(effectiveCadence.soft));
+    setFirmDays(String(effectiveCadence.firm));
+    setFinalDays(String(effectiveCadence.final));
+    setSendAt(effectiveSendTime);
   }
 
   function closeDialog() {
@@ -131,6 +146,15 @@ export function InvoiceDialog({
         <form
           action={async (formData) => {
             try {
+              const cadenceValues = [softDays, firmDays, finalDays].map((value) => Number(value));
+              if (cadenceValues.some((value) => Number.isNaN(value) || value < 0)) {
+                throw new Error("Schedule days must be zero or more.");
+              }
+
+              if (!/^\d{2}:\d{2}$/.test(sendAt) || !isAllowedReminderSendTime(sendAt)) {
+                throw new Error("Send time must be between 8:00 AM and 6:00 PM.");
+              }
+
               await upsertInvoiceAction(formData);
               closeDialog();
               toast("Invoice saved.", "success");
@@ -233,6 +257,83 @@ export function InvoiceDialog({
             </div>
           ) : null}
 
+          <div className="space-y-3 rounded-md border border-zinc-200 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-medium text-zinc-900">Schedule timing</p>
+                <p className="text-sm text-zinc-600">
+                  Set the timing this invoice should follow.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSoftDays(String(cadence.soft));
+                  setFirmDays(String(cadence.firm));
+                  setFinalDays(String(cadence.final));
+                  setSendAt(sendTime);
+                }}
+                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 transition hover:bg-zinc-50 hover:text-zinc-950"
+              >
+                Use defaults
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-zinc-700">Soft</span>
+                <input
+                  name="soft_reminder_days"
+                  type="number"
+                  min="0"
+                  required
+                  value={softDays}
+                  onChange={(event) => setSoftDays(event.target.value)}
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 shadow-sm outline-none transition focus:border-zinc-900"
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-zinc-700">Firm</span>
+                <input
+                  name="firm_reminder_days"
+                  type="number"
+                  min="0"
+                  required
+                  value={firmDays}
+                  onChange={(event) => setFirmDays(event.target.value)}
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 shadow-sm outline-none transition focus:border-zinc-900"
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-zinc-700">Final</span>
+                <input
+                  name="final_reminder_days"
+                  type="number"
+                  min="0"
+                  required
+                  value={finalDays}
+                  onChange={(event) => setFinalDays(event.target.value)}
+                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 shadow-sm outline-none transition focus:border-zinc-900"
+                />
+              </label>
+            </div>
+
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-zinc-700">Send time</span>
+              <input
+                name="reminder_send_time"
+                type="time"
+                required
+                min={REMINDER_SEND_TIME_MIN}
+                max={REMINDER_SEND_TIME_MAX}
+                value={sendAt}
+                onChange={(event) => setSendAt(event.target.value)}
+                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 shadow-sm outline-none transition focus:border-zinc-900"
+              />
+              <p className="text-xs text-zinc-500">Current send time: {formatTimeLabel(sendAt)}</p>
+            </label>
+          </div>
+
           <label className="block space-y-2">
             <span className="text-sm font-medium text-zinc-700">External Payment Link</span>
             <input
@@ -252,7 +353,10 @@ export function InvoiceDialog({
 
           {scheduledReminders.length ? (
             <div className="rounded-md border border-zinc-200 p-3 text-sm text-zinc-700">
-              <p className="font-medium text-zinc-900">Scheduled reminders</p>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <p className="font-medium text-zinc-900">Scheduled reminders</p>
+                <p className="text-xs text-zinc-500">Sends at {formatTimeLabel(sendAt)}</p>
+              </div>
               <div className="mt-2 space-y-1.5">
                 {scheduledReminders.map((step) => (
                   <div key={`${step.kind}-${step.date}`} className="flex items-center justify-between gap-3">

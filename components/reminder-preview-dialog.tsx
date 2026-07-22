@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { formatDateTime, formatInvoiceDate } from "@/lib/date";
-import type { ReminderScheduleItem } from "@/lib/reminders";
+import { formatDateTime, formatInvoiceDate, formatTimeLabel } from "@/lib/date";
+import type { ReminderCadenceOffsets, ReminderScheduleItem } from "@/lib/reminders";
 import { ReminderTemplatePreview } from "@/components/reminder-template-preview";
 import type { ReminderHistoryItem } from "@/components/reminder-history-dialog";
 
@@ -18,6 +18,9 @@ type ReminderPreviewDialogProps = {
   dueDate: string;
   amountDue: string;
   paymentLink: string | null;
+  sendTime: string;
+  cadence: ReminderCadenceOffsets;
+  nextScheduledReminder: ReminderScheduleItem | null;
   previews: ReminderPreviewItem[];
   schedule: ReminderScheduleItem[];
   reminders: ReminderHistoryItem[];
@@ -28,6 +31,9 @@ export function ReminderPreviewDialog({
   dueDate,
   amountDue,
   paymentLink,
+  sendTime,
+  cadence,
+  nextScheduledReminder,
   previews,
   schedule,
   reminders,
@@ -119,6 +125,22 @@ export function ReminderPreviewDialog({
               </dd>
             </div>
           </dl>
+
+          <div className="rounded-md border border-zinc-200 p-3 text-sm text-zinc-700">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="font-medium text-zinc-900">Automation</p>
+                <p className="mt-1 text-zinc-600">
+                  {nextScheduledReminder
+                    ? `Next send: ${nextScheduledReminder.label} on ${formatInvoiceDate(nextScheduledReminder.date)} at ${formatTimeLabel(sendTime)}`
+                    : "No more reminders are scheduled for this invoice."}
+                </p>
+              </div>
+              <div className="text-xs text-zinc-500">
+                Soft {cadence.soft}d · Firm {cadence.firm}d · Final {cadence.final}d
+              </div>
+            </div>
+          </div>
 
           {previews.length > 1 ? (
             <div className="grid gap-2 md:grid-cols-3">

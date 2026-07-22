@@ -107,20 +107,54 @@ export async function upsertInvoiceAction(formData: FormData) {
   assertDbError(preferencesError, "Unable to load reminder cadence");
   const cadence = getReminderCadence(preferences);
   const sendTime = getReminderSendTime(preferences);
-  let lockedCadence = cadence;
-  let lockedSendTime = sendTime;
+  let remindersSent = 0;
+  const customCadence = {
+    soft: Number(String(formData.get("soft_reminder_days") ?? cadence.soft)),
+    firm: Number(String(formData.get("firm_reminder_days") ?? cadence.firm)),
+    final: Number(String(formData.get("final_reminder_days") ?? cadence.final)),
+  };
+  const customSendTime = String(formData.get("reminder_send_time") ?? sendTime).trim() || sendTime;
+
+  if (Object.values(customCadence).some((value) => Number.isNaN(value) || value < 0)) {
+    throw new Error("Schedule days must be zero or more.");
+  }
+
+  if (!/^\d{2}:\d{2}$/.test(customSendTime) || !isAllowedReminderSendTime(customSendTime)) {
+    throw new Error("Send time must be between 8:00 AM and 6:00 PM.");
+  }
+
+  let lockedCadence = customCadence;
+  let lockedSendTime = customSendTime;
 
   if (id) {
-    const { data: existingInvoice, error: existingInvoiceError } = await supabase
-      .from("invoices")
-      .select("reminder_cadence,reminder_send_time")
-      .eq("id", id)
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const [{ data: existingInvoice, error: existingInvoiceError }, { count, error: reminderCountError }] =
+      await Promise.all([
+        supabase
+          .from("invoices")
+          .select("reminder_cadence,reminder_send_time")
+          .eq("id", id)
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        supabase.from("reminders").select("id", { count: "exact", head: true }).eq("invoice_id", id),
+      ]);
     assertDbError(existingInvoiceError, "Unable to load existing invoice");
+    assertDbError(reminderCountError, "Unable to load reminder history");
+    remindersSent = count ?? 0;
 
-    lockedCadence = getInvoiceReminderCadence(existingInvoice, cadence);
-    lockedSendTime = getInvoiceReminderSendTime(existingInvoice, sendTime);
+    lockedCadence = getInvoiceReminderCadence(
+      {
+        reminder_cadence: customCadence,
+        reminder_send_time: customSendTime,
+      },
+      getInvoiceReminderCadence(existingInvoice, cadence),
+    );
+    lockedSendTime = getInvoiceReminderSendTime(
+      {
+        reminder_cadence: customCadence,
+        reminder_send_time: customSendTime,
+      },
+      getInvoiceReminderSendTime(existingInvoice, sendTime),
+    );
   }
 
   const softTemplate = starterTemplates.byKind.soft;
@@ -146,7 +180,7 @@ export async function upsertInvoiceAction(formData: FormData) {
     next_follow_up_at: nextReminderAt(
       String(formData.get("due_date") ?? "").trim(),
       parseReminderPlan(reminderPlan),
-      0,
+      remindersSent,
       lockedCadence,
       lockedSendTime,
     ),

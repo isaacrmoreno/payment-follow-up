@@ -11,13 +11,23 @@ const TOUR_AUTO_STARTED_KEY = "payment-follow-up:onboarding-auto-started";
 const START_TOUR_EVENT = "payment-follow-up:start-tour";
 
 type TourStage = "clients" | "invoices" | "reminders";
+type TourStep = {
+  element?: string;
+  popover?: {
+    title: string;
+    description: string;
+    side?: "top" | "right" | "bottom" | "left";
+    align?: "start" | "center" | "end";
+    onDoneClick?: () => void;
+  };
+};
 
 const STAGES: Record<
   TourStage,
   {
     path: string;
     next?: TourStage;
-    steps: Parameters<typeof driver>[0]["steps"];
+    steps: TourStep[];
   }
 > = {
   clients: {

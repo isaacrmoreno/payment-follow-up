@@ -3,7 +3,7 @@ import { InvoiceActions } from "@/components/invoice-actions";
 import { InvoiceDialog } from "@/components/invoice-dialog";
 import type { ReminderHistoryItem } from "@/components/reminder-history-dialog";
 import { requireUser } from "@/lib/auth";
-import { formatInvoiceDate } from "@/lib/date";
+import { formatInvoiceDate, formatTimeLabel } from "@/lib/date";
 import { prioritizeInvoices, remainingBalance, statusLabel } from "@/lib/invoice";
 import { titleCaseWords } from "@/lib/labels";
 import {
@@ -104,6 +104,7 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
         body: content.body,
       };
     });
+    const nextScheduledReminder = reminderSchedule[(remindersByInvoice[invoice.id] ?? []).length] ?? null;
 
     return {
       ...invoice,
@@ -116,6 +117,9 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
         dueDate,
         amountDue: `$${remaining.toFixed(2)}`,
         paymentLink: invoice.external_reference || null,
+        sendTime: invoiceSendTime,
+        cadence: invoiceCadence,
+        nextScheduledReminder,
       },
     };
   });
@@ -204,11 +208,19 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
                       <dt className="font-medium text-zinc-900">Remaining</dt>
                       <dd>{invoice.previewMeta.amountDue}</dd>
                     </div>
-                    <div>
-                      <dt className="font-medium text-zinc-900">Reminders</dt>
-                      <dd>{invoice.reminders.length}</dd>
-                    </div>
-                  </dl>
+                  <div>
+                    <dt className="font-medium text-zinc-900">Reminders</dt>
+                    <dd>{invoice.reminders.length}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-zinc-900">Next send</dt>
+                    <dd>
+                      {invoice.previewMeta.nextScheduledReminder
+                        ? `${formatInvoiceDate(invoice.previewMeta.nextScheduledReminder.date)} · ${formatTimeLabel(invoice.previewMeta.sendTime)}`
+                        : "Complete"}
+                    </dd>
+                  </div>
+                </dl>
 
                   <div className="mt-3">
                     <InvoiceActions
@@ -245,6 +257,7 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
                     <th className="px-4 py-3">Due</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Remaining</th>
+                    <th className="px-4 py-3">Next send</th>
                     <th className="px-4 py-3">Reminders</th>
                     <th className="px-4 py-3">Actions</th>
                   </tr>
@@ -261,6 +274,11 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
                         </span>
                       </td>
                       <td className="px-4 py-3">{invoice.previewMeta.amountDue}</td>
+                      <td className="px-4 py-3 text-zinc-600">
+                        {invoice.previewMeta.nextScheduledReminder
+                          ? `${formatInvoiceDate(invoice.previewMeta.nextScheduledReminder.date)} · ${formatTimeLabel(invoice.previewMeta.sendTime)}`
+                          : "Complete"}
+                      </td>
                       <td className="px-4 py-3 text-zinc-600">
                         {invoice.reminders.length} reminder{invoice.reminders.length === 1 ? "" : "s"}
                       </td>

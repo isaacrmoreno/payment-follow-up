@@ -44,6 +44,9 @@ type InvoiceActionsProps = {
     dueDate: string;
     amountDue: string;
     paymentLink: string | null;
+    sendTime: string;
+    cadence: ReminderCadenceOffsets;
+    nextScheduledReminder: ReminderScheduleItem | null;
     previews: {
       kind: string;
       label: string;
