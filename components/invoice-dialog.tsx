@@ -14,6 +14,7 @@ import {
   getInvoiceReminderSendTime,
   isAllowedReminderSendTime,
   REMINDER_PLAN_OPTIONS,
+  REMINDER_DAY_OFFSET_MAX,
   REMINDER_SEND_TIME_MAX,
   REMINDER_SEND_TIME_MIN,
   parseReminderPlan,
@@ -24,6 +25,23 @@ type ClientOption = {
   id: string;
   name: string;
 };
+
+function normalizeDayOffsetInput(value: string) {
+  const digitsOnly = value.replace(/[^\d]/g, "");
+  if (!digitsOnly) {
+    return "";
+  }
+
+  return String(Math.min(Number(digitsOnly), REMINDER_DAY_OFFSET_MAX));
+}
+
+function getTodayDateValue() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 type InvoiceDialogInvoice = {
   id: string;
@@ -70,6 +88,7 @@ export function InvoiceDialog({
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const { toast } = useToast();
+  const minDueDate = getTodayDateValue();
   const [clientId, setClientId] = useState(invoice?.client_id ?? "");
   const [invoiceTitle, setInvoiceTitle] = useState(invoice?.title ?? "");
   const [dueDate, setDueDate] = useState(invoice?.due_date ?? "");
@@ -147,17 +166,23 @@ export function InvoiceDialog({
           action={async (formData) => {
             try {
               const cadenceValues = [softDays, firmDays, finalDays].map((value) => Number(value));
-              if (cadenceValues.some((value) => Number.isNaN(value) || value < 0)) {
-                throw new Error("Schedule days must be zero or more.");
+              if (cadenceValues.some((value) => Number.isNaN(value) || value < 0 || value > REMINDER_DAY_OFFSET_MAX)) {
+                throw new Error(`Schedule days must be between 0 and ${REMINDER_DAY_OFFSET_MAX}.`);
               }
 
               if (!/^\d{2}:\d{2}$/.test(sendAt) || !isAllowedReminderSendTime(sendAt)) {
                 throw new Error("Send time must be between 8:00 AM and 6:00 PM.");
               }
 
-              await upsertInvoiceAction(formData);
+              const result = await upsertInvoiceAction(formData);
               closeDialog();
-              toast("Invoice saved.", "success");
+              if (result?.sentImmediately) {
+                toast("Invoice saved. First reminder sent.", "success");
+              } else if (result?.immediateSendError) {
+                toast(`Invoice saved. ${result.immediateSendError}`, "default");
+              } else {
+                toast("Invoice saved.", "success");
+              }
             } catch (error) {
               toast(error instanceof Error ? error.message : "Unable to save invoice.", "error");
             }
@@ -213,6 +238,7 @@ export function InvoiceDialog({
               <input
                 name="due_date"
                 type="date"
+                min={minDueDate}
                 required
                 value={dueDate}
                 onChange={(event) => setDueDate(event.target.value)}
@@ -284,11 +310,13 @@ export function InvoiceDialog({
                 <span className="text-sm font-medium text-zinc-700">Soft</span>
                 <input
                   name="soft_reminder_days"
-                  type="number"
-                  min="0"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={2}
                   required
                   value={softDays}
-                  onChange={(event) => setSoftDays(event.target.value)}
+                  onChange={(event) => setSoftDays(normalizeDayOffsetInput(event.target.value))}
                   className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 shadow-sm outline-none transition focus:border-zinc-900"
                 />
               </label>
@@ -296,11 +324,13 @@ export function InvoiceDialog({
                 <span className="text-sm font-medium text-zinc-700">Firm</span>
                 <input
                   name="firm_reminder_days"
-                  type="number"
-                  min="0"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={2}
                   required
                   value={firmDays}
-                  onChange={(event) => setFirmDays(event.target.value)}
+                  onChange={(event) => setFirmDays(normalizeDayOffsetInput(event.target.value))}
                   className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 shadow-sm outline-none transition focus:border-zinc-900"
                 />
               </label>
@@ -308,11 +338,13 @@ export function InvoiceDialog({
                 <span className="text-sm font-medium text-zinc-700">Final</span>
                 <input
                   name="final_reminder_days"
-                  type="number"
-                  min="0"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={2}
                   required
                   value={finalDays}
-                  onChange={(event) => setFinalDays(event.target.value)}
+                  onChange={(event) => setFinalDays(normalizeDayOffsetInput(event.target.value))}
                   className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 shadow-sm outline-none transition focus:border-zinc-900"
                 />
               </label>

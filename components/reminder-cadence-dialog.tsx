@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { upsertReminderCadenceAction } from "@/app/actions";
 import { PendingButton } from "@/components/pending-button";
 import { useToast } from "@/components/toast";
-import { REMINDER_SEND_TIME_MAX, REMINDER_SEND_TIME_MIN } from "@/lib/reminders";
+import { REMINDER_DAY_OFFSET_MAX, REMINDER_SEND_TIME_MAX, REMINDER_SEND_TIME_MIN } from "@/lib/reminders";
 
 type ReminderCadenceDialogProps = {
   cadence: {
@@ -17,6 +17,15 @@ type ReminderCadenceDialogProps = {
   triggerLabel?: string;
   triggerClassName?: string;
 };
+
+function normalizeDayOffsetInput(value: string) {
+  const digitsOnly = value.replace(/[^\d]/g, "");
+  if (!digitsOnly) {
+    return "";
+  }
+
+  return String(Math.min(Number(digitsOnly), REMINDER_DAY_OFFSET_MAX));
+}
 
 export function ReminderCadenceDialog({
   cadence,
@@ -129,11 +138,13 @@ export function ReminderCadenceDialog({
               <span className="text-sm font-medium text-zinc-700">Soft</span>
               <input
                 name="soft_reminder_days"
-                type="number"
-                min="0"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={2}
                 required
                 value={softDays}
-                onChange={(event) => setSoftDays(event.target.value)}
+                onChange={(event) => setSoftDays(normalizeDayOffsetInput(event.target.value))}
                 className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 shadow-sm outline-none transition focus:border-zinc-900"
               />
             </label>
@@ -141,11 +152,13 @@ export function ReminderCadenceDialog({
               <span className="text-sm font-medium text-zinc-700">Firm</span>
               <input
                 name="firm_reminder_days"
-                type="number"
-                min="0"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={2}
                 required
                 value={firmDays}
-                onChange={(event) => setFirmDays(event.target.value)}
+                onChange={(event) => setFirmDays(normalizeDayOffsetInput(event.target.value))}
                 className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 shadow-sm outline-none transition focus:border-zinc-900"
               />
             </label>
@@ -153,11 +166,13 @@ export function ReminderCadenceDialog({
               <span className="text-sm font-medium text-zinc-700">Final</span>
               <input
                 name="final_reminder_days"
-                type="number"
-                min="0"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={2}
                 required
                 value={finalDays}
-                onChange={(event) => setFinalDays(event.target.value)}
+                onChange={(event) => setFinalDays(normalizeDayOffsetInput(event.target.value))}
                 className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 shadow-sm outline-none transition focus:border-zinc-900"
               />
             </label>

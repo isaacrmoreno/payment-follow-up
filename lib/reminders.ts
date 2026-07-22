@@ -11,6 +11,7 @@ type ReminderCadenceValue = Partial<Record<keyof ReminderCadenceOffsets, number 
 export const DEFAULT_REMINDER_SEND_TIME = "08:30";
 export const REMINDER_SEND_TIME_MIN = "08:00";
 export const REMINDER_SEND_TIME_MAX = "18:00";
+export const REMINDER_DAY_OFFSET_MAX = 30;
 type StarterReminderKind = Exclude<ReminderTemplateKind, "custom">;
 
 type StarterTemplate = {
@@ -246,7 +247,7 @@ function toReminderOffset(value: number | string | null | undefined, fallback: n
     return fallback;
   }
 
-  return parsed;
+  return Math.min(parsed, REMINDER_DAY_OFFSET_MAX);
 }
 
 export function getStoredReminderCadence(
@@ -340,7 +341,19 @@ export function nextReminderAt(
   cadence: ReminderCadenceOffsets = DEFAULT_REMINDER_CADENCE,
   sendTime = DEFAULT_REMINDER_SEND_TIME,
 ) {
-  return scheduleReminderPlan(dueDate, plan, cadence, sendTime)[remindersSent]?.iso ?? null;
+  const nextScheduledReminder = scheduleReminderPlan(dueDate, plan, cadence, sendTime)[remindersSent];
+  if (!nextScheduledReminder) {
+    return null;
+  }
+
+  const scheduledTime = new Date(nextScheduledReminder.iso);
+  const now = new Date();
+
+  if (Number.isNaN(scheduledTime.getTime())) {
+    return nextScheduledReminder.iso;
+  }
+
+  return scheduledTime <= now ? now.toISOString() : nextScheduledReminder.iso;
 }
 
 export function getReminderTemplateSource(template?: ReminderTemplateLike | null) {

@@ -13,6 +13,7 @@ import {
   ensureStarterReminderTemplates,
   getInvoiceReminderCadence,
   getInvoiceReminderSendTime,
+  REMINDER_DAY_OFFSET_MAX,
   getReminderCadence,
   getReminderSendTime,
   isAllowedReminderSendTime,
@@ -115,8 +116,8 @@ export async function upsertInvoiceAction(formData: FormData) {
   };
   const customSendTime = String(formData.get("reminder_send_time") ?? sendTime).trim() || sendTime;
 
-  if (Object.values(customCadence).some((value) => Number.isNaN(value) || value < 0)) {
-    throw new Error("Schedule days must be zero or more.");
+  if (Object.values(customCadence).some((value) => Number.isNaN(value) || value < 0 || value > REMINDER_DAY_OFFSET_MAX)) {
+    throw new Error(`Schedule days must be between 0 and ${REMINDER_DAY_OFFSET_MAX}.`);
   }
 
   if (!/^\d{2}:\d{2}$/.test(customSendTime) || !isAllowedReminderSendTime(customSendTime)) {
@@ -190,16 +191,47 @@ export async function upsertInvoiceAction(formData: FormData) {
     throw new Error("Client is required");
   }
 
+  let savedInvoiceId = id;
   if (id) {
-    const { error } = await supabase.from("invoices").update(payload).eq("id", id);
+    const { data: updatedInvoice, error } = await supabase
+      .from("invoices")
+      .update(payload)
+      .eq("id", id)
+      .select("id")
+      .single();
     assertDbError(error, "Unable to update invoice");
+    savedInvoiceId = updatedInvoice?.id ?? id;
   } else {
-    const { error } = await supabase.from("invoices").insert(payload);
+    const { data: createdInvoice, error } = await supabase
+      .from("invoices")
+      .insert(payload)
+      .select("id")
+      .single();
     assertDbError(error, "Unable to create invoice");
+    savedInvoiceId = createdInvoice?.id ?? "";
+  }
+
+  let sentImmediately = false;
+  let immediateSendError: string | null = null;
+  const shouldSendImmediately =
+    Boolean(savedInvoiceId) &&
+    Boolean(payload.next_follow_up_at) &&
+    !["paid", "closed"].includes(payload.status) &&
+    new Date(payload.next_follow_up_at).getTime() <= Date.now();
+
+  if (shouldSendImmediately && savedInvoiceId) {
+    try {
+      await sendInvoiceReminderById(supabase, user.id, savedInvoiceId);
+      sentImmediately = true;
+    } catch (error) {
+      immediateSendError =
+        error instanceof Error ? error.message : "The first reminder is due now, but it could not be sent.";
+    }
   }
 
   revalidatePath("/");
   revalidatePath("/invoices");
+  return { sentImmediately, immediateSendError };
 }
 
 export async function upsertReminderTemplateAction(formData: FormData) {
@@ -355,10 +387,10 @@ export async function upsertReminderCadenceAction(formData: FormData) {
 
   if (
     [payload.soft_reminder_days, payload.firm_reminder_days, payload.final_reminder_days].some(
-      (value) => Number.isNaN(value) || value < 0,
+      (value) => Number.isNaN(value) || value < 0 || value > REMINDER_DAY_OFFSET_MAX,
     )
   ) {
-    throw new Error("Cadence values must be zero or more.");
+    throw new Error(`Cadence values must be between 0 and ${REMINDER_DAY_OFFSET_MAX}.`);
   }
 
   if (!/^\d{2}:\d{2}$/.test(payload.reminder_send_time)) {
