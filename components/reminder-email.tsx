@@ -31,3 +31,23 @@ export function ReminderEmail({
   );
 }
 
+export function renderReminderEmailHtml({
+  clientName,
+  invoiceTitle,
+  amountDue,
+  paymentLink,
+}: ReminderEmailProps) {
+  const linkHtml = paymentLink
+    ? `<p>Pay here: <a href="${paymentLink}">${paymentLink}</a></p>`
+    : "";
+
+  return `
+    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+      <h1 style="font-size: 20px;">Payment reminder</h1>
+      <p>Hi ${clientName},</p>
+      <p>This is a quick reminder that <strong>${invoiceTitle}</strong> is still open for ${amountDue}.</p>
+      ${linkHtml}
+      <p>Thanks.</p>
+    </div>
+  `;
+}

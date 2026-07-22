@@ -5,6 +5,7 @@ import {
   sendReminderAction,
   upsertInvoiceAction,
 } from "@/app/actions";
+import { PendingButton } from "@/components/pending-button";
 
 export default async function InvoicesPage() {
   await requireUser();
@@ -39,7 +40,14 @@ export default async function InvoicesPage() {
         </label>
         <label className="block space-y-2">
           <span className="text-sm">Invoice number</span>
-          <input name="invoice_number" className="w-full rounded-md border border-zinc-300 px-3 py-2" />
+          <input
+            name="invoice_number"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            placeholder="1001"
+            className="w-full rounded-md border border-zinc-300 px-3 py-2"
+          />
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block space-y-2">
@@ -84,7 +92,12 @@ export default async function InvoicesPage() {
           <span className="text-sm">Next follow-up</span>
           <input name="next_follow_up_at" type="datetime-local" className="w-full rounded-md border border-zinc-300 px-3 py-2" />
         </label>
-        <button className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white">Save invoice</button>
+        <PendingButton
+          className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+          pendingLabel="Saving invoice..."
+        >
+          Save invoice
+        </PendingButton>
       </form>
 
       <div className="overflow-hidden rounded-lg border border-zinc-200">
@@ -119,13 +132,21 @@ export default async function InvoicesPage() {
                   <form action={markInvoicePaidAction}>
                     <input name="id" type="hidden" value={invoice.id} />
                     <input name="amount_due" type="hidden" value={invoice.amount_due} />
-                    <button className="text-sm underline">Mark paid</button>
+                    <PendingButton
+                      className="text-sm underline disabled:opacity-50"
+                      pendingLabel="Saving..."
+                    >
+                      Mark paid
+                    </PendingButton>
                   </form>
                   <form action={sendReminderAction} className="mt-2">
                     <input name="invoice_id" type="hidden" value={invoice.id} />
-                    <button className="text-sm underline">
+                    <PendingButton
+                      className="text-sm underline disabled:opacity-50"
+                      pendingLabel="Sending..."
+                    >
                       Send reminder
-                    </button>
+                    </PendingButton>
                   </form>
                 </td>
               </tr>

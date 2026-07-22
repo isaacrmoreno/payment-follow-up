@@ -50,10 +50,9 @@ export function SignInForm() {
         disabled={isPending}
         className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
       >
-        Send magic link
+        {isPending ? "Sending..." : "Send magic link"}
       </button>
       <p className="text-sm text-zinc-600">{message}</p>
     </form>
   );
 }
-

@@ -1,6 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
 import { deleteClientAction, upsertClientAction } from "@/app/actions";
+import { PendingButton } from "@/components/pending-button";
 
 export default async function ClientsPage() {
   await requireUser();
@@ -31,7 +32,12 @@ export default async function ClientsPage() {
           <span className="text-sm">Notes</span>
           <textarea name="notes" className="min-h-28 w-full rounded-md border border-zinc-300 px-3 py-2" />
         </label>
-        <button className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white">Save client</button>
+        <PendingButton
+          className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+          pendingLabel="Saving client..."
+        >
+          Save client
+        </PendingButton>
       </form>
 
       <div className="overflow-hidden rounded-lg border border-zinc-200">
@@ -55,7 +61,12 @@ export default async function ClientsPage() {
                 <td className="px-4 py-3">
                   <form action={deleteClientAction}>
                     <input name="id" type="hidden" value={client.id} />
-                    <button className="text-sm underline">Delete</button>
+                    <PendingButton
+                      className="text-sm underline disabled:opacity-50"
+                      pendingLabel="Deleting..."
+                    >
+                      Delete
+                    </PendingButton>
                   </form>
                 </td>
               </tr>

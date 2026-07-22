@@ -4,11 +4,17 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
 import { getResendClient } from "@/lib/email";
-import { ReminderEmail } from "@/components/reminder-email";
+import { renderReminderEmailHtml } from "@/components/reminder-email";
 
 function toNumber(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim();
   return value ? Number(value) : null;
+}
+
+function assertDbError(error: { message: string } | null | undefined, context: string) {
+  if (error) {
+    throw new Error(`${context}: ${error.message}`);
+  }
 }
 
 export async function sendMagicLinkAction(formData: FormData) {
@@ -43,9 +49,11 @@ export async function upsertClientAction(formData: FormData) {
   };
 
   if (id) {
-    await supabase.from("clients").update(payload).eq("id", id);
+    const { error } = await supabase.from("clients").update(payload).eq("id", id);
+    assertDbError(error, "Unable to update client");
   } else {
-    await supabase.from("clients").insert(payload);
+    const { error } = await supabase.from("clients").insert(payload);
+    assertDbError(error, "Unable to create client");
   }
 
   revalidatePath("/");
@@ -55,7 +63,8 @@ export async function upsertClientAction(formData: FormData) {
 export async function deleteClientAction(formData: FormData) {
   const id = String(formData.get("id") ?? "").trim();
   const supabase = await createSupabaseServerClient();
-  await supabase.from("clients").delete().eq("id", id);
+  const { error } = await supabase.from("clients").delete().eq("id", id);
+  assertDbError(error, "Unable to delete client");
   revalidatePath("/");
   revalidatePath("/clients");
 }
@@ -80,9 +89,11 @@ export async function upsertInvoiceAction(formData: FormData) {
   };
 
   if (id) {
-    await supabase.from("invoices").update(payload).eq("id", id);
+    const { error } = await supabase.from("invoices").update(payload).eq("id", id);
+    assertDbError(error, "Unable to update invoice");
   } else {
-    await supabase.from("invoices").insert(payload);
+    const { error } = await supabase.from("invoices").insert(payload);
+    assertDbError(error, "Unable to create invoice");
   }
 
   revalidatePath("/");
@@ -95,7 +106,7 @@ export async function markInvoicePaidAction(formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const user = await requireUser();
 
-  await supabase
+  const { error } = await supabase
     .from("invoices")
     .update({
       user_id: user.id,
@@ -104,6 +115,7 @@ export async function markInvoicePaidAction(formData: FormData) {
       next_follow_up_at: null,
     })
     .eq("id", id);
+  assertDbError(error, "Unable to mark invoice paid");
 
   revalidatePath("/");
   revalidatePath("/invoices");
@@ -132,7 +144,7 @@ export async function sendReminderAction(formData: FormData): Promise<void> {
   const paymentLink = invoice.external_reference || null;
   const resend = getResendClient();
   const subject = `Reminder: ${invoice.title} is still open`;
-  const body = ReminderEmail({
+  const html = renderReminderEmailHtml({
     clientName: invoice.clients.name ?? "there",
     invoiceTitle: invoice.title,
     amountDue: amountDue.toFixed(2),
@@ -143,7 +155,7 @@ export async function sendReminderAction(formData: FormData): Promise<void> {
     from: process.env.RESEND_FROM_EMAIL ?? "Payment Follow-Up <onboarding@resend.dev>",
     to: [invoice.clients.email],
     subject,
-    react: body,
+    html,
   });
 
   if (emailError) {
@@ -161,13 +173,14 @@ export async function sendReminderAction(formData: FormData): Promise<void> {
     delivery_status: "sent",
   });
 
-  await supabase
+  const { error: invoiceUpdateError } = await supabase
     .from("invoices")
     .update({
       last_contacted_at: new Date().toISOString(),
       next_follow_up_at: null,
     })
     .eq("id", invoice.id);
+  assertDbError(invoiceUpdateError, "Unable to update invoice after sending reminder");
 
   revalidatePath("/");
   revalidatePath("/invoices");
