@@ -1,32 +1,39 @@
-import { createSupabaseServerReadClient } from "@/lib/supabase/server";
-import { requireUser } from "@/lib/auth";
-import { titleCaseWords } from "@/lib/labels";
-import { prioritizeInvoices, remainingBalance, statusLabel } from "@/lib/invoice";
-import { InvoiceDialog } from "@/components/invoice-dialog";
-import { InvoiceActions } from "@/components/invoice-actions";
 import Link from "next/link";
-import { formatInvoiceDate } from "@/lib/date";
+import { InvoiceActions } from "@/components/invoice-actions";
+import { InvoiceDialog } from "@/components/invoice-dialog";
 import type { ReminderHistoryItem } from "@/components/reminder-history-dialog";
+import { requireUser } from "@/lib/auth";
+import { formatInvoiceDate } from "@/lib/date";
+import { prioritizeInvoices, remainingBalance, statusLabel } from "@/lib/invoice";
+import { titleCaseWords } from "@/lib/labels";
+import { ensureDefaultReminderTemplate, renderReminderContent } from "@/lib/reminders";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type InvoicesPageProps = {
   searchParams?: Promise<{ status?: string }>;
 };
 
 export default async function InvoicesPage({ searchParams }: InvoicesPageProps) {
-  await requireUser();
+  const user = await requireUser();
   const params = (await searchParams) ?? {};
-  const supabase = await createSupabaseServerReadClient();
-  const [{ data: clients }, { data: invoices }, { data: reminders }] = await Promise.all([
+  const supabase = await createSupabaseServerClient();
+  const [{ data: clients }, { data: invoices }, { data: reminders }, { data: loadedTemplates }] = await Promise.all([
     supabase.from("clients").select("id,name").order("name"),
     supabase
       .from("invoices")
-      .select("*, clients(name)")
+      .select("*, clients(name), reminder_templates(name,subject,body)")
       .order("due_date", { ascending: true }),
     supabase
       .from("reminders")
       .select("id,invoice_id,sent_at,subject,delivery_status")
       .order("sent_at", { ascending: false }),
+    supabase.from("reminder_templates").select("id,name,subject,body,is_default").order("created_at", { ascending: false }),
   ]);
+  const templates =
+    loadedTemplates && loadedTemplates.length
+      ? loadedTemplates
+      : [await ensureDefaultReminderTemplate(supabase, user.id)];
+
   const remindersByInvoice = (reminders ?? []).reduce<Record<string, ReminderHistoryItem[]>>((groups, reminder) => {
     const invoiceId = reminder.invoice_id;
     if (!invoiceId) {
@@ -45,11 +52,33 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
     });
     return groups;
   }, {});
-  const prioritizedInvoices = prioritizeInvoices(invoices ?? []).map((invoice) => ({
-    ...invoice,
-    remaining: remainingBalance(invoice),
-    reminders: remindersByInvoice[invoice.id] ?? [],
-  }));
+
+  const prioritizedInvoices = prioritizeInvoices(invoices ?? []).map((invoice) => {
+    const remaining = remainingBalance(invoice);
+    const dueDate = formatInvoiceDate(invoice.due_date);
+    const clientName = titleCaseWords(invoice.clients?.name ?? "there");
+    const reminderPreview = renderReminderContent(invoice.reminder_templates, {
+      clientName,
+      invoiceTitle: invoice.title,
+      amountDue: `$${remaining.toFixed(2)}`,
+      dueDate,
+      paymentLink: invoice.external_reference || null,
+    });
+
+    return {
+      ...invoice,
+      remaining,
+      reminders: remindersByInvoice[invoice.id] ?? [],
+      reminderPreview,
+      previewMeta: {
+        clientName,
+        dueDate,
+        amountDue: `$${remaining.toFixed(2)}`,
+        paymentLink: invoice.external_reference || null,
+      },
+    };
+  });
+
   const selectedFilter = params.status ?? "open";
   const filteredInvoices = prioritizedInvoices.filter((invoice) => {
     if (selectedFilter === "all") {
@@ -78,7 +107,7 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
     <div className="space-y-8">
       <section className="flex items-center justify-between rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
         <h1 className="text-lg font-semibold">Invoices</h1>
-        <InvoiceDialog clients={clients ?? []} />
+        <InvoiceDialog clients={clients ?? []} templates={templates ?? []} />
       </section>
 
       <section className="space-y-3">
@@ -116,11 +145,11 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
                 <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-sm text-zinc-600">
                   <div>
                     <dt className="font-medium text-zinc-900">Due</dt>
-                    <dd>{formatInvoiceDate(invoice.due_date)}</dd>
+                    <dd>{invoice.previewMeta.dueDate}</dd>
                   </div>
                   <div>
                     <dt className="font-medium text-zinc-900">Remaining</dt>
-                    <dd>${invoice.remaining.toFixed(2)}</dd>
+                    <dd>{invoice.previewMeta.amountDue}</dd>
                   </div>
                   <div>
                     <dt className="font-medium text-zinc-900">Reminders</dt>
@@ -134,6 +163,11 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
                     amountDue={invoice.amount_due}
                     initialStatus={invoice.status}
                     reminders={invoice.reminders}
+                    reminderPreview={{
+                      ...invoice.previewMeta,
+                      subject: invoice.reminderPreview.subject,
+                      body: invoice.reminderPreview.body,
+                    }}
                   />
                 </div>
               </article>
@@ -150,45 +184,50 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
         {filteredInvoices.length ? (
           <div className="hidden rounded-md border border-zinc-200 bg-white shadow-sm md:block">
             <div className="overflow-x-auto rounded-md">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-zinc-50 text-zinc-500">
-                <tr>
-                  <th className="px-4 py-3">Client</th>
-                  <th className="px-4 py-3">Title</th>
-                  <th className="px-4 py-3">Due</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Remaining</th>
-                  <th className="px-4 py-3">Reminders</th>
-                  <th className="px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredInvoices.map((invoice) => (
-                  <tr key={invoice.id} className="border-t border-zinc-200">
-                    <td className="px-4 py-3">{titleCaseWords(invoice.clients?.name ?? "-")}</td>
-                    <td className="px-4 py-3">{invoice.title}</td>
-                    <td className="px-4 py-3">{formatInvoiceDate(invoice.due_date)}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700">
-                        {statusLabel(invoice.status)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">${invoice.remaining.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-zinc-600">
-                      {invoice.reminders.length} reminder{invoice.reminders.length === 1 ? "" : "s"}
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      <InvoiceActions
-                        invoiceId={invoice.id}
-                        amountDue={invoice.amount_due}
-                        initialStatus={invoice.status}
-                        reminders={invoice.reminders}
-                      />
-                    </td>
+              <table className="w-full text-left text-sm">
+                <thead className="bg-zinc-50 text-zinc-500">
+                  <tr>
+                    <th className="px-4 py-3">Client</th>
+                    <th className="px-4 py-3">Title</th>
+                    <th className="px-4 py-3">Due</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Remaining</th>
+                    <th className="px-4 py-3">Reminders</th>
+                    <th className="px-4 py-3">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredInvoices.map((invoice) => (
+                    <tr key={invoice.id} className="border-t border-zinc-200">
+                      <td className="px-4 py-3">{titleCaseWords(invoice.clients?.name ?? "-")}</td>
+                      <td className="px-4 py-3">{invoice.title}</td>
+                      <td className="px-4 py-3">{invoice.previewMeta.dueDate}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700">
+                          {statusLabel(invoice.status)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">{invoice.previewMeta.amountDue}</td>
+                      <td className="px-4 py-3 text-zinc-600">
+                        {invoice.reminders.length} reminder{invoice.reminders.length === 1 ? "" : "s"}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <InvoiceActions
+                          invoiceId={invoice.id}
+                          amountDue={invoice.amount_due}
+                          initialStatus={invoice.status}
+                          reminders={invoice.reminders}
+                          reminderPreview={{
+                            ...invoice.previewMeta,
+                            subject: invoice.reminderPreview.subject,
+                            body: invoice.reminderPreview.body,
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         ) : null}

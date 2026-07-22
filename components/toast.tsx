@@ -19,13 +19,17 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
+  const dismissToast = useCallback((id: string) => {
+    setToasts((current) => current.filter((item) => item.id !== id));
+  }, []);
+
   const toast = useCallback((message: string, kind: ToastKind = "default") => {
     const id = crypto.randomUUID();
     setToasts((current) => [...current, { id, message, kind }]);
     window.setTimeout(() => {
-      setToasts((current) => current.filter((item) => item.id !== id));
+      dismissToast(id);
     }, 3500);
-  }, []);
+  }, [dismissToast]);
 
   const value = useMemo(() => ({ toast }), [toast]);
 
@@ -38,12 +42,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="fixed right-4 top-4 z-50 flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2">
+      <div className="fixed bottom-4 right-4 z-50 flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2">
         {toasts.map((item) => (
           <div
             key={item.id}
             className={[
-              "rounded-md border px-4 py-3 text-sm shadow-lg backdrop-blur",
+              "flex items-start justify-between gap-3 rounded-md border px-4 py-3 text-sm shadow-lg backdrop-blur",
               item.kind === "error"
                 ? "border-rose-200 bg-rose-50 text-rose-900"
                 : item.kind === "success"
@@ -51,7 +55,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   : "border-zinc-200 bg-white text-zinc-900",
             ].join(" ")}
           >
-            {item.message}
+            <span>{item.message}</span>
+            <button
+              type="button"
+              onClick={() => dismissToast(item.id)}
+              className="shrink-0 rounded-md px-1 text-base leading-none opacity-60 transition hover:opacity-100"
+              aria-label="Dismiss toast"
+            >
+              x
+            </button>
           </div>
         ))}
       </div>

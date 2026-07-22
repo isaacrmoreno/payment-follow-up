@@ -1,16 +1,24 @@
 import * as React from "react";
+import {
+  renderReminderEmailHtml as renderTemplateReminderEmailHtml,
+  type ReminderTemplateLike,
+  type ReminderTemplateVariables,
+} from "@/lib/reminders";
 
 type ReminderEmailProps = {
   clientName: string;
   invoiceTitle: string;
   amountDue: string;
+  dueDate: string;
   paymentLink?: string | null;
+  template?: ReminderTemplateLike | null;
 };
 
 export function ReminderEmail({
   clientName,
   invoiceTitle,
   amountDue,
+  dueDate,
   paymentLink,
 }: ReminderEmailProps) {
   return (
@@ -21,6 +29,7 @@ export function ReminderEmail({
         This is a quick reminder that <strong>{invoiceTitle}</strong> is still
         open for {amountDue}.
       </p>
+      <p>Due date: {dueDate}</p>
       {paymentLink ? (
         <p>
           Pay here: <a href={paymentLink}>{paymentLink}</a>
@@ -35,19 +44,17 @@ export function renderReminderEmailHtml({
   clientName,
   invoiceTitle,
   amountDue,
+  dueDate,
   paymentLink,
+  template,
 }: ReminderEmailProps) {
-  const linkHtml = paymentLink
-    ? `<p>Pay here: <a href="${paymentLink}">${paymentLink}</a></p>`
-    : "";
+  const variables: ReminderTemplateVariables = {
+    clientName,
+    invoiceTitle,
+    amountDue,
+    dueDate,
+    paymentLink,
+  };
 
-  return `
-    <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-      <h1 style="font-size: 20px;">Payment reminder</h1>
-      <p>Hi ${clientName},</p>
-      <p>This is a quick reminder that <strong>${invoiceTitle}</strong> is still open for ${amountDue}.</p>
-      ${linkHtml}
-      <p>Thanks.</p>
-    </div>
-  `;
+  return renderTemplateReminderEmailHtml(template, variables);
 }

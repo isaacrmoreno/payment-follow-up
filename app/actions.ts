@@ -5,6 +5,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
 import { getResendClient } from "@/lib/email";
 import { renderReminderEmailHtml } from "@/components/reminder-email";
+import { formatInvoiceDate } from "@/lib/date";
+import { ensureDefaultReminderTemplate, renderReminderContent } from "@/lib/reminders";
 
 function toNumber(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim();
@@ -83,6 +85,9 @@ export async function upsertInvoiceAction(formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const id = String(formData.get("id") ?? "").trim();
   const clientId = String(formData.get("client_id") ?? "").trim();
+  const reminderTemplateId =
+    String(formData.get("reminder_template_id") ?? "").trim() ||
+    (await ensureDefaultReminderTemplate(supabase, user.id)).id;
   const payload = {
     user_id: user.id,
     client_id: clientId,
@@ -93,6 +98,7 @@ export async function upsertInvoiceAction(formData: FormData) {
     currency: String(formData.get("currency") ?? "").trim() || "usd",
     due_date: String(formData.get("due_date") ?? "").trim(),
     status: String(formData.get("status") ?? "").trim(),
+    reminder_template_id: reminderTemplateId,
     blocker_reason: String(formData.get("blocker_reason") ?? "").trim() || null,
     external_reference: String(formData.get("external_reference") ?? "").trim() || null,
     next_follow_up_at: String(formData.get("next_follow_up_at") ?? "").trim() || null,
@@ -111,6 +117,63 @@ export async function upsertInvoiceAction(formData: FormData) {
   }
 
   revalidatePath("/");
+  revalidatePath("/invoices");
+}
+
+export async function upsertReminderTemplateAction(formData: FormData) {
+  const user = await requireUser();
+  const supabase = await createSupabaseServerClient();
+  const id = String(formData.get("id") ?? "").trim();
+  const payload = {
+    user_id: user.id,
+    name: String(formData.get("name") ?? "").trim(),
+    subject: String(formData.get("subject") ?? "").trim(),
+    body: String(formData.get("body") ?? "").trim(),
+  };
+
+  if (id) {
+    const { error } = await supabase.from("reminder_templates").update(payload).eq("id", id);
+    assertDbError(error, "Unable to update template");
+  } else {
+    const { error } = await supabase.from("reminder_templates").insert(payload);
+    assertDbError(error, "Unable to create template");
+  }
+
+  revalidatePath("/templates");
+  revalidatePath("/invoices");
+}
+
+export async function deleteReminderTemplateAction(formData: FormData) {
+  const user = await requireUser();
+  const supabase = await createSupabaseServerClient();
+  const id = String(formData.get("id") ?? "").trim();
+
+  if (!id) {
+    throw new Error("Template not found");
+  }
+
+  const { data: template, error: templateError } = await supabase
+    .from("reminder_templates")
+    .select("id,is_default")
+    .eq("id", id)
+    .single();
+  assertDbError(templateError, "Unable to load template");
+
+  if (template?.is_default) {
+    throw new Error("The default template cannot be deleted.");
+  }
+
+  const fallbackTemplate = await ensureDefaultReminderTemplate(supabase, user.id);
+  const { error: invoiceError } = await supabase
+    .from("invoices")
+    .update({ reminder_template_id: fallbackTemplate.id })
+    .eq("reminder_template_id", id);
+  assertDbError(invoiceError, "Unable to move invoices to the default template");
+
+  const { error } = await supabase.from("reminder_templates").delete().eq("id", id);
+  assertDbError(error, "Unable to delete template");
+
+  revalidatePath("/templates");
   revalidatePath("/invoices");
 }
 
@@ -188,7 +251,7 @@ export async function sendReminderAction(formData: FormData) {
 
   const { data: invoice } = await supabase
     .from("invoices")
-    .select("*, clients(name,email)")
+    .select("*, clients(name,email), reminder_templates(name,subject,body)")
     .eq("id", invoiceId)
     .single();
 
@@ -203,18 +266,27 @@ export async function sendReminderAction(formData: FormData) {
   const amountDue = Number(invoice.amount_due) - Number(invoice.amount_paid);
   const paymentLink = invoice.external_reference || null;
   const resend = getResendClient();
-  const subject = `Reminder: ${invoice.title} is still open`;
+  const dueDate = formatInvoiceDate(invoice.due_date);
+  const content = renderReminderContent(invoice.reminder_templates, {
+    clientName: invoice.clients.name ?? "there",
+    invoiceTitle: invoice.title,
+    amountDue: `$${amountDue.toFixed(2)}`,
+    dueDate,
+    paymentLink,
+  });
   const html = renderReminderEmailHtml({
     clientName: invoice.clients.name ?? "there",
     invoiceTitle: invoice.title,
-    amountDue: amountDue.toFixed(2),
+    amountDue: `$${amountDue.toFixed(2)}`,
+    dueDate,
     paymentLink,
+    template: invoice.reminder_templates,
   });
 
   const { error: emailError } = await resend.emails.send({
     from: process.env.RESEND_FROM_EMAIL ?? "Payment Follow-Up <onboarding@resend.dev>",
     to: [invoice.clients.email],
-    subject,
+    subject: content.subject,
     html,
   });
 
@@ -226,9 +298,9 @@ export async function sendReminderAction(formData: FormData) {
     user_id: user.id,
     invoice_id: invoice.id,
     channel: "email",
-    template_name: "manual",
-    subject,
-    body: `Reminder sent to ${invoice.clients.email}`,
+    template_name: content.templateName,
+    subject: content.subject,
+    body: content.body,
     sent_at: new Date().toISOString(),
     delivery_status: "sent",
   });

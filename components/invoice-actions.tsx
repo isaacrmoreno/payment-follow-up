@@ -12,6 +12,7 @@ import {
   ReminderHistoryDialog,
   type ReminderHistoryItem,
 } from "@/components/reminder-history-dialog";
+import { ReminderPreviewDialog } from "@/components/reminder-preview-dialog";
 import { useToast } from "@/components/toast";
 
 type InvoiceActionsProps = {
@@ -19,6 +20,14 @@ type InvoiceActionsProps = {
   amountDue: string | number;
   initialStatus: string | null;
   reminders: ReminderHistoryItem[];
+  reminderPreview: {
+    clientName: string;
+    dueDate: string;
+    amountDue: string;
+    paymentLink: string | null;
+    subject: string;
+    body: string;
+  };
 };
 
 export function InvoiceActions({
@@ -26,6 +35,7 @@ export function InvoiceActions({
   amountDue,
   initialStatus,
   reminders,
+  reminderPreview,
 }: InvoiceActionsProps) {
   const { toast } = useToast();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -213,6 +223,8 @@ export function InvoiceActions({
               className="fixed z-[100] min-w-44 rounded-md border border-zinc-200 bg-white p-1 shadow-lg"
               style={{ top: menuPosition.top, left: menuPosition.left }}
             >
+              <ReminderPreviewDialog {...reminderPreview} />
+
               {!paid && !closed ? (
                 <button
                   type="button"
