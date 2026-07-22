@@ -26,6 +26,7 @@ type TemplateDialogProps = {
     subject: string;
     body: string;
     is_default?: boolean;
+    kind?: string;
   };
   triggerLabel?: string;
   triggerClassName?: string;
@@ -210,7 +211,7 @@ export function TemplateDialog({
             <ReminderTemplatePreview subject={preview.subject} body={preview.body} />
 
             <div className="flex items-center justify-between gap-3">
-              {template && !template.is_default ? (
+              {template && template.kind === "custom" ? (
                 <button
                   type="button"
                   onClick={() => deleteDialogRef.current?.showModal()}
@@ -241,7 +242,7 @@ export function TemplateDialog({
         </dialog>
       ) : null}
 
-      {open && template && !template.is_default ? (
+      {open && template && template.kind === "custom" ? (
         <dialog
           ref={deleteDialogRef}
           className="fixed inset-0 m-auto w-[min(100vw-2rem,420px)] rounded-md border border-zinc-200 bg-white p-0 shadow-2xl backdrop:bg-zinc-950/50"

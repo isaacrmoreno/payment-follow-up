@@ -1,81 +1,121 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { upsertInvoiceAction } from "@/app/actions";
 import { PendingButton } from "@/components/pending-button";
 import { CurrencyInput } from "@/components/currency-input";
-import { ReminderTemplatePreview } from "@/components/reminder-template-preview";
 import { TitleInput } from "@/components/title-input";
 import { useToast } from "@/components/toast";
 import { formatInvoiceDate } from "@/lib/date";
 import { titleCaseWords } from "@/lib/labels";
-import { renderReminderContent } from "@/lib/reminders";
+import {
+  type ReminderCadenceOffsets,
+  REMINDER_PLAN_OPTIONS,
+  parseReminderPlan,
+  scheduleReminderPlan,
+} from "@/lib/reminders";
 
 type ClientOption = {
   id: string;
   name: string;
 };
 
-type TemplateOption = {
+type InvoiceDialogInvoice = {
   id: string;
-  name: string;
-  subject: string;
-  body: string;
-  is_default?: boolean;
+  client_id: string;
+  title: string;
+  due_date: string;
+  amount_due: string | number;
+  amount_paid?: string | number | null;
+  status?: string | null;
+  reminder_plan?: string | null;
+  external_reference?: string | null;
 };
 
 export function InvoiceDialog({
   clients,
-  templates,
+  cadence,
+  sendTime,
+  invoice,
+  title,
+  triggerLabel,
+  triggerClassName,
+  hideTrigger = false,
+  openOnMount = false,
+  onOpen,
+  onClose,
 }: {
   clients: ClientOption[];
-  templates: TemplateOption[];
+  cadence: ReminderCadenceOffsets;
+  sendTime: string;
+  invoice?: InvoiceDialogInvoice;
+  title?: string;
+  triggerLabel?: string;
+  triggerClassName?: string;
+  hideTrigger?: boolean;
+  openOnMount?: boolean;
+  onOpen?: () => void;
+  onClose?: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const { toast } = useToast();
-  const [clientId, setClientId] = useState("");
-  const [title, setTitle] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [amountDue, setAmountDue] = useState("0");
-  const [paymentLink, setPaymentLink] = useState("");
-  const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
+  const [clientId, setClientId] = useState(invoice?.client_id ?? "");
+  const [invoiceTitle, setInvoiceTitle] = useState(invoice?.title ?? "");
+  const [dueDate, setDueDate] = useState(invoice?.due_date ?? "");
+  const [amountDue, setAmountDue] = useState(String(invoice?.amount_due ?? "0"));
+  const [paymentLink, setPaymentLink] = useState(invoice?.external_reference ?? "");
+  const [reminderPlan, setReminderPlan] = useState(invoice?.reminder_plan ?? "soft_firm_final");
 
-  const selectedClient = clients.find((client) => client.id === clientId) ?? null;
-  const selectedTemplate = templates.find((template) => template.id === templateId) ?? null;
-  const preview = renderReminderContent(selectedTemplate, {
-    clientName: titleCaseWords(selectedClient?.name ?? "there"),
-    invoiceTitle: title || "Website Redesign",
-    amountDue: amountDue && amountDue !== "0" ? `$${amountDue}` : "$0.00",
-    dueDate: formatInvoiceDate(dueDate || "2026-07-22"),
-    paymentLink: paymentLink || null,
-  });
+  const scheduledReminders = dueDate
+    ? scheduleReminderPlan(dueDate, parseReminderPlan(reminderPlan), cadence, sendTime)
+    : [];
 
   function resetForm() {
-    setClientId("");
-    setTitle("");
-    setDueDate("");
-    setAmountDue("0");
-    setPaymentLink("");
-    setTemplateId(templates[0]?.id ?? "");
+    setClientId(invoice?.client_id ?? "");
+    setInvoiceTitle(invoice?.title ?? "");
+    setDueDate(invoice?.due_date ?? "");
+    setAmountDue(String(invoice?.amount_due ?? "0"));
+    setPaymentLink(invoice?.external_reference ?? "");
+    setReminderPlan(invoice?.reminder_plan ?? "soft_firm_final");
   }
 
   function closeDialog() {
     dialogRef.current?.close();
-    resetForm();
   }
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!openOnMount || !dialog || dialog.open) {
+      return;
+    }
+
+    dialog.showModal();
+  }, [openOnMount]);
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => dialogRef.current?.showModal()}
-        className="inline-flex items-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800"
-      >
-        Add invoice
-      </button>
+      {!hideTrigger ? (
+        <button
+          type="button"
+          onClick={() => {
+            onOpen?.();
+            dialogRef.current?.showModal();
+          }}
+          className={
+            triggerClassName ??
+            "inline-flex items-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800"
+          }
+        >
+          {triggerLabel ?? "Add invoice"}
+        </button>
+      ) : null}
 
       <dialog
         ref={dialogRef}
+        onClose={() => {
+          resetForm();
+          onClose?.();
+        }}
         className="fixed inset-0 m-auto w-[min(100vw-2rem,620px)] rounded-md border border-zinc-200 bg-white p-0 shadow-2xl backdrop:bg-zinc-950/50"
       >
         <form
@@ -91,7 +131,7 @@ export function InvoiceDialog({
           className="space-y-4 p-4"
         >
           <div className="flex items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold">Add invoice</h2>
+            <h2 className="text-lg font-semibold">{title ?? (invoice ? "Edit invoice" : "Add invoice")}</h2>
             <button
               type="button"
               onClick={closeDialog}
@@ -101,7 +141,7 @@ export function InvoiceDialog({
             </button>
           </div>
 
-          <input name="id" type="hidden" />
+          <input name="id" type="hidden" value={invoice?.id ?? ""} />
 
           <label className="block space-y-2">
             <span className="text-sm font-medium text-zinc-700">Client</span>
@@ -126,9 +166,9 @@ export function InvoiceDialog({
             <TitleInput
               name="title"
               required
-              value={title}
-              onInput={(event) => setTitle(event.currentTarget.value)}
-              placeholder="July design retainer"
+              value={invoiceTitle}
+              onInput={(event) => setInvoiceTitle(event.currentTarget.value)}
+              placeholder="Project invoice"
               className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-900 shadow-sm outline-none transition focus:border-zinc-900"
             />
           </label>
@@ -157,21 +197,21 @@ export function InvoiceDialog({
             </label>
           </div>
 
-          <input name="amount_paid" type="hidden" value="0" />
-          <input name="status" type="hidden" value="due" />
+          <input name="amount_paid" type="hidden" value={String(invoice?.amount_paid ?? "0")} />
+          <input name="status" type="hidden" value={invoice?.status ?? "due"} />
 
           <label className="block space-y-2">
-            <span className="text-sm font-medium text-zinc-700">Email Template</span>
+            <span className="text-sm font-medium text-zinc-700">Reminder Plan</span>
             <select
-              name="reminder_template_id"
+              name="reminder_plan"
               required
-              value={templateId}
-              onChange={(event) => setTemplateId(event.target.value)}
+              value={reminderPlan}
+              onChange={(event) => setReminderPlan(event.target.value)}
               className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-900 shadow-sm outline-none transition focus:border-zinc-900"
             >
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name}
+              {REMINDER_PLAN_OPTIONS.map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.label}
                 </option>
               ))}
             </select>
@@ -194,8 +234,19 @@ export function InvoiceDialog({
           <input name="blocker_reason" type="hidden" value="" />
           <input name="next_follow_up_at" type="hidden" value="" />
 
-          <ReminderTemplatePreview subject={preview.subject} body={preview.body} />
-
+          {scheduledReminders.length ? (
+            <div className="rounded-md border border-zinc-200 p-3 text-sm text-zinc-700">
+              <p className="font-medium text-zinc-900">Scheduled reminders</p>
+              <div className="mt-2 space-y-1.5">
+                {scheduledReminders.map((step) => (
+                  <div key={`${step.kind}-${step.date}`} className="flex items-center justify-between gap-3">
+                    <span>{step.label}</span>
+                    <span className="text-zinc-500">{formatInvoiceDate(step.date)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="flex items-center justify-end gap-3">
             <button
               type="button"
@@ -208,7 +259,7 @@ export function InvoiceDialog({
               className="inline-flex items-center justify-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
               pendingLabel="Saving invoice..."
             >
-              Save invoice
+              {invoice ? "Save changes" : "Save invoice"}
             </PendingButton>
           </div>
         </form>

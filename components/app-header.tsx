@@ -8,7 +8,7 @@ import { usePathname } from "next/navigation";
 const links = [
   { href: "/clients", label: "Clients" },
   { href: "/invoices", label: "Invoices" },
-  { href: "/templates", label: "Templates" },
+  { href: "/reminders", label: "Reminders" },
 ];
 
 export function AppHeader({
@@ -31,11 +31,20 @@ export function AppHeader({
             <p className="text-sm font-medium">Payment Follow-Up</p>
             <p className="text-xs text-zinc-500">{email}</p>
           </div>
-          <form action={signOutAction}>
+          <form action={signOutAction} className="hidden lg:block">
             <button className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm">
               Sign out
             </button>
           </form>
+          <div className="lg:hidden">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((open) => !open)}
+              className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700 transition hover:border-zinc-900 hover:text-zinc-900"
+            >
+              Menu
+            </button>
+          </div>
         </div>
 
         <nav className="hidden flex-wrap gap-2 lg:flex">
@@ -55,37 +64,32 @@ export function AppHeader({
             </Link>
           ))}
         </nav>
-
-        <div className="lg:hidden">
-          <button
-            type="button"
-            onClick={() => setMenuOpen((open) => !open)}
-            className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700 transition hover:border-zinc-900 hover:text-zinc-900"
-          >
-            Menu
-          </button>
-          {menuOpen ? (
-            <div className="mt-3 grid gap-2">
-              {links.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setMenuOpen(false)}
-                  aria-current={isActive(link.href) ? "page" : undefined}
-                  className={[
-                    "rounded-md border px-3 py-2 text-sm transition",
-                    isActive(link.href)
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-zinc-200 text-zinc-700 hover:border-zinc-900 hover:text-zinc-900",
-                  ].join(" ")}
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-          ) : null}
-        </div>
       </div>
+      {menuOpen ? (
+        <div className="mt-3 grid gap-2 lg:hidden">
+          {links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              onClick={() => setMenuOpen(false)}
+              aria-current={isActive(link.href) ? "page" : undefined}
+              className={[
+                "rounded-md border px-3 py-2 text-sm transition",
+                isActive(link.href)
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-200 text-zinc-700 hover:border-zinc-900 hover:text-zinc-900",
+              ].join(" ")}
+            >
+              {link.label}
+            </Link>
+          ))}
+          <form action={signOutAction}>
+            <button className="w-full rounded-md border border-zinc-200 px-3 py-2 text-left text-sm text-zinc-700 transition hover:border-zinc-900 hover:text-zinc-900">
+              Sign out
+            </button>
+          </form>
+        </div>
+      ) : null}
     </header>
   );
 }

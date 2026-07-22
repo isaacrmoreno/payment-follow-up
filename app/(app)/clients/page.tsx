@@ -1,9 +1,8 @@
 import { createSupabaseServerReadClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
-import { deleteClientAction } from "@/app/actions";
 import { titleCaseWords } from "@/lib/labels";
 import { formatPhoneNumber } from "@/lib/phone";
-import { DeleteClientButton } from "@/components/delete-client-button";
+import { ClientActions } from "@/components/client-actions";
 import { ClientDialog } from "@/components/client-dialog";
 
 export default async function ClientsPage() {
@@ -45,12 +44,13 @@ export default async function ClientsPage() {
                   <h3 className="truncate text-base font-semibold text-zinc-950">{titleCaseWords(client.name)}</h3>
                   <p className="mt-1 text-sm text-zinc-600">{client.email ?? "No email"}</p>
                 </div>
-                <form action={deleteClientAction}>
-                  <input name="id" type="hidden" value={client.id} />
-                  <DeleteClientButton disabled={(invoiceCounts[client.id] ?? 0) > 0} />
-                </form>
+                <ClientActions client={client} invoiceCount={invoiceCounts[client.id] ?? 0} />
               </div>
               <dl className="mt-4 grid gap-3 text-sm text-zinc-600">
+                <div>
+                  <dt className="font-medium text-zinc-900">Invoices</dt>
+                  <dd>{invoiceCounts[client.id] ?? 0}</dd>
+                </div>
                 <div>
                   <dt className="font-medium text-zinc-900">Phone</dt>
                   <dd>{client.phone ? formatPhoneNumber(client.phone) : "-"}</dd>
@@ -59,11 +59,6 @@ export default async function ClientsPage() {
                   <dt className="font-medium text-zinc-900">Notes</dt>
                   <dd className="line-clamp-3">{client.notes ?? "-"}</dd>
                 </div>
-                {(invoiceCounts[client.id] ?? 0) > 0 ? (
-                  <div className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                    {invoiceCounts[client.id]} invoice{invoiceCounts[client.id] === 1 ? "" : "s"} attached. Delete invoices first.
-                  </div>
-                ) : null}
               </dl>
             </article>
           ))}
@@ -80,6 +75,7 @@ export default async function ClientsPage() {
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">Invoices</th>
                 <th className="px-4 py-3">Phone</th>
                 <th className="px-4 py-3">Notes</th>
                 <th className="px-4 py-3">Action</th>
@@ -90,19 +86,17 @@ export default async function ClientsPage() {
                 <tr key={client.id} className="border-t border-zinc-200">
                   <td className="px-4 py-3">{titleCaseWords(client.name)}</td>
                   <td className="px-4 py-3">{client.email ?? "-"}</td>
+                  <td className="px-4 py-3">{invoiceCounts[client.id] ?? 0}</td>
                   <td className="px-4 py-3">{client.phone ? formatPhoneNumber(client.phone) : "-"}</td>
                   <td className="px-4 py-3">{client.notes ?? "-"}</td>
                   <td className="px-4 py-3">
-                    <form action={deleteClientAction}>
-                      <input name="id" type="hidden" value={client.id} />
-                      <DeleteClientButton disabled={(invoiceCounts[client.id] ?? 0) > 0} />
-                    </form>
+                    <ClientActions client={client} invoiceCount={invoiceCounts[client.id] ?? 0} />
                   </td>
                 </tr>
               ))}
               {!clients?.length ? (
                 <tr>
-                  <td className="px-4 py-4 text-zinc-500" colSpan={5}>
+                  <td className="px-4 py-4 text-zinc-500" colSpan={6}>
                     No clients yet.
                   </td>
                 </tr>

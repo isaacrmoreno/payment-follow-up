@@ -5,12 +5,16 @@ create table if not exists public.reminder_templates (
   subject text not null,
   body text not null,
   is_default boolean not null default false,
+  kind text not null default 'custom',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 alter table public.reminder_templates
   add column if not exists is_default boolean not null default false;
+
+alter table public.reminder_templates
+  add column if not exists kind text not null default 'custom';
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.reminder_templates to authenticated;
@@ -41,4 +45,8 @@ create policy "reminder_templates_delete_own"
 alter table public.invoices
   add column if not exists reminder_template_id uuid references public.reminder_templates(id) on delete set null;
 
+alter table public.invoices
+  add column if not exists reminder_plan text not null default 'soft_firm_final';
+
 grant update(reminder_template_id) on public.invoices to authenticated;
+grant update(reminder_plan) on public.invoices to authenticated;

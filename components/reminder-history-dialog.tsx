@@ -7,6 +7,7 @@ export type ReminderHistoryItem = {
   id: string;
   sent_at: string | null;
   subject: string | null;
+  template_name?: string | null;
   delivery_status: string | null;
 };
 

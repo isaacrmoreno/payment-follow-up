@@ -3,10 +3,20 @@
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
-import { getResendClient } from "@/lib/email";
-import { renderReminderEmailHtml } from "@/components/reminder-email";
-import { formatInvoiceDate } from "@/lib/date";
-import { ensureDefaultReminderTemplate, renderReminderContent } from "@/lib/reminders";
+import {
+  rescheduleOpenInvoicesForUser,
+  sendDueRemindersForUser,
+  sendInvoiceReminderById,
+} from "@/lib/reminder-delivery";
+import {
+  DEFAULT_REMINDER_SEND_TIME,
+  ensureStarterReminderTemplates,
+  getReminderCadence,
+  getReminderSendTime,
+  isAllowedReminderSendTime,
+  nextReminderAt,
+  parseReminderPlan,
+} from "@/lib/reminders";
 
 function toNumber(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim();
@@ -85,9 +95,20 @@ export async function upsertInvoiceAction(formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const id = String(formData.get("id") ?? "").trim();
   const clientId = String(formData.get("client_id") ?? "").trim();
-  const reminderTemplateId =
-    String(formData.get("reminder_template_id") ?? "").trim() ||
-    (await ensureDefaultReminderTemplate(supabase, user.id)).id;
+  const reminderPlan = String(formData.get("reminder_plan") ?? "").trim() || "soft_firm_final";
+  const starterTemplates = await ensureStarterReminderTemplates(supabase, user.id);
+  const { data: preferences, error: preferencesError } = await supabase
+    .from("user_preferences")
+    .select("soft_reminder_days,firm_reminder_days,final_reminder_days,reminder_send_time")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  assertDbError(preferencesError, "Unable to load reminder cadence");
+  const cadence = getReminderCadence(preferences);
+  const sendTime = getReminderSendTime(preferences);
+  const softTemplate = starterTemplates.byKind.soft;
+  if (!softTemplate?.id) {
+    throw new Error("Unable to load starter reminder templates.");
+  }
   const payload = {
     user_id: user.id,
     client_id: clientId,
@@ -98,10 +119,17 @@ export async function upsertInvoiceAction(formData: FormData) {
     currency: String(formData.get("currency") ?? "").trim() || "usd",
     due_date: String(formData.get("due_date") ?? "").trim(),
     status: String(formData.get("status") ?? "").trim(),
-    reminder_template_id: reminderTemplateId,
+    reminder_template_id: softTemplate.id,
+    reminder_plan: reminderPlan,
     blocker_reason: String(formData.get("blocker_reason") ?? "").trim() || null,
     external_reference: String(formData.get("external_reference") ?? "").trim() || null,
-    next_follow_up_at: String(formData.get("next_follow_up_at") ?? "").trim() || null,
+    next_follow_up_at: nextReminderAt(
+      String(formData.get("due_date") ?? "").trim(),
+      parseReminderPlan(reminderPlan),
+      0,
+      cadence,
+      sendTime,
+    ),
   };
 
   if (!clientId) {
@@ -139,7 +167,7 @@ export async function upsertReminderTemplateAction(formData: FormData) {
     assertDbError(error, "Unable to create template");
   }
 
-  revalidatePath("/templates");
+  revalidatePath("/reminders");
   revalidatePath("/invoices");
 }
 
@@ -154,16 +182,19 @@ export async function deleteReminderTemplateAction(formData: FormData) {
 
   const { data: template, error: templateError } = await supabase
     .from("reminder_templates")
-    .select("id,is_default")
+    .select("id,is_default,kind")
     .eq("id", id)
     .single();
   assertDbError(templateError, "Unable to load template");
 
-  if (template?.is_default) {
-    throw new Error("The default template cannot be deleted.");
+  if (template?.kind && template.kind !== "custom") {
+    throw new Error("Starter templates cannot be deleted.");
   }
 
-  const fallbackTemplate = await ensureDefaultReminderTemplate(supabase, user.id);
+  const fallbackTemplate = (await ensureStarterReminderTemplates(supabase, user.id)).byKind.soft;
+  if (!fallbackTemplate?.id) {
+    throw new Error("Unable to load starter reminder templates.");
+  }
   const { error: invoiceError } = await supabase
     .from("invoices")
     .update({ reminder_template_id: fallbackTemplate.id })
@@ -173,7 +204,7 @@ export async function deleteReminderTemplateAction(formData: FormData) {
   const { error } = await supabase.from("reminder_templates").delete().eq("id", id);
   assertDbError(error, "Unable to delete template");
 
-  revalidatePath("/templates");
+  revalidatePath("/reminders");
   revalidatePath("/invoices");
 }
 
@@ -248,71 +279,100 @@ export async function sendReminderAction(formData: FormData) {
   const user = await requireUser();
   const invoiceId = String(formData.get("invoice_id") ?? "").trim();
   const supabase = await createSupabaseServerClient();
+  await sendInvoiceReminderById(supabase, user.id, invoiceId);
 
-  const { data: invoice } = await supabase
+  revalidatePath("/");
+  revalidatePath("/invoices");
+  return { ok: true };
+}
+
+export async function upsertReminderCadenceAction(formData: FormData) {
+  const user = await requireUser();
+  const supabase = await createSupabaseServerClient();
+
+  const payload = {
+    user_id: user.id,
+    soft_reminder_days: Number(String(formData.get("soft_reminder_days") ?? "0")),
+    firm_reminder_days: Number(String(formData.get("firm_reminder_days") ?? "7")),
+    final_reminder_days: Number(String(formData.get("final_reminder_days") ?? "14")),
+    reminder_send_time:
+      String(formData.get("reminder_send_time") ?? "").trim() || DEFAULT_REMINDER_SEND_TIME,
+  };
+
+  if (
+    [payload.soft_reminder_days, payload.firm_reminder_days, payload.final_reminder_days].some(
+      (value) => Number.isNaN(value) || value < 0,
+    )
+  ) {
+    throw new Error("Cadence values must be zero or more.");
+  }
+
+  if (!/^\d{2}:\d{2}$/.test(payload.reminder_send_time)) {
+    throw new Error("Send time must be in HH:MM format.");
+  }
+
+  if (!isAllowedReminderSendTime(payload.reminder_send_time)) {
+    throw new Error("Send time must be between 8:00 AM and 6:00 PM.");
+  }
+
+  const { error } = await supabase.from("user_preferences").upsert(payload, { onConflict: "user_id" });
+  if (error?.message.includes("Could not find the table 'public.user_preferences'")) {
+    throw new Error("Run the user preferences SQL first, then try saving cadence again.");
+  }
+  if (error?.message.includes("permission denied")) {
+    throw new Error("Run the user preferences SQL again so the authenticated grants are applied.");
+  }
+  assertDbError(error, "Unable to save cadence");
+
+  await rescheduleOpenInvoicesForUser(supabase, user.id);
+
+  revalidatePath("/reminders");
+  revalidatePath("/invoices");
+}
+
+export async function runDueRemindersAction() {
+  const user = await requireUser();
+  const supabase = await createSupabaseServerClient();
+  const result = await sendDueRemindersForUser(supabase, user.id);
+
+  revalidatePath("/");
+  revalidatePath("/invoices");
+  return result;
+}
+
+export async function queueInvoiceReminderNowAction(formData: FormData) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Test reminder queueing is only available in development.");
+  }
+
+  const user = await requireUser();
+  const supabase = await createSupabaseServerClient();
+  const invoiceId = String(formData.get("invoice_id") ?? "").trim();
+
+  if (!invoiceId) {
+    throw new Error("Invoice not found.");
+  }
+
+  const { data: invoice, error: invoiceError } = await supabase
     .from("invoices")
-    .select("*, clients(name,email), reminder_templates(name,subject,body)")
+    .select("id,status,user_id")
     .eq("id", invoiceId)
     .single();
+  assertDbError(invoiceError, "Unable to load invoice");
 
-  if (!invoice) {
-    throw new Error("Invoice not found");
+  if (!invoice || invoice.user_id !== user.id) {
+    throw new Error("Invoice not found.");
   }
 
-  if (!invoice.clients?.email) {
-    throw new Error("Client email is required to send a reminder");
+  if (invoice.status === "paid" || invoice.status === "closed") {
+    throw new Error("This invoice no longer needs reminders.");
   }
 
-  const amountDue = Number(invoice.amount_due) - Number(invoice.amount_paid);
-  const paymentLink = invoice.external_reference || null;
-  const resend = getResendClient();
-  const dueDate = formatInvoiceDate(invoice.due_date);
-  const content = renderReminderContent(invoice.reminder_templates, {
-    clientName: invoice.clients.name ?? "there",
-    invoiceTitle: invoice.title,
-    amountDue: `$${amountDue.toFixed(2)}`,
-    dueDate,
-    paymentLink,
-  });
-  const html = renderReminderEmailHtml({
-    clientName: invoice.clients.name ?? "there",
-    invoiceTitle: invoice.title,
-    amountDue: `$${amountDue.toFixed(2)}`,
-    dueDate,
-    paymentLink,
-    template: invoice.reminder_templates,
-  });
-
-  const { error: emailError } = await resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL ?? "Payment Follow-Up <onboarding@resend.dev>",
-    to: [invoice.clients.email],
-    subject: content.subject,
-    html,
-  });
-
-  if (emailError) {
-    throw new Error(emailError.message);
-  }
-
-  await supabase.from("reminders").insert({
-    user_id: user.id,
-    invoice_id: invoice.id,
-    channel: "email",
-    template_name: content.templateName,
-    subject: content.subject,
-    body: content.body,
-    sent_at: new Date().toISOString(),
-    delivery_status: "sent",
-  });
-
-  const { error: invoiceUpdateError } = await supabase
+  const { error } = await supabase
     .from("invoices")
-    .update({
-      last_contacted_at: new Date().toISOString(),
-      next_follow_up_at: null,
-    })
-    .eq("id", invoice.id);
-  assertDbError(invoiceUpdateError, "Unable to update invoice after sending reminder");
+    .update({ next_follow_up_at: new Date().toISOString() })
+    .eq("id", invoiceId);
+  assertDbError(error, "Unable to queue test reminder");
 
   revalidatePath("/");
   revalidatePath("/invoices");

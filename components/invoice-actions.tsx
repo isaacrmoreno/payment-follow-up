@@ -8,32 +8,51 @@ import {
   markInvoicePaidAction,
   sendReminderAction,
 } from "@/app/actions";
-import {
-  ReminderHistoryDialog,
-  type ReminderHistoryItem,
-} from "@/components/reminder-history-dialog";
+import type { ReminderHistoryItem } from "@/components/reminder-history-dialog";
+import { InvoiceDialog } from "@/components/invoice-dialog";
 import { ReminderPreviewDialog } from "@/components/reminder-preview-dialog";
 import { useToast } from "@/components/toast";
+import type { ReminderCadenceOffsets, ReminderScheduleItem } from "@/lib/reminders";
 
 type InvoiceActionsProps = {
-  invoiceId: string;
-  amountDue: string | number;
-  initialStatus: string | null;
+  invoice: {
+    id: string;
+    client_id: string;
+    title: string;
+    due_date: string;
+    amount_due: string | number;
+    amount_paid?: string | number | null;
+    status?: string | null;
+    reminder_plan?: string | null;
+    external_reference?: string | null;
+  };
+  clients: {
+    id: string;
+    name: string;
+  }[];
+  cadence: ReminderCadenceOffsets;
+  sendTime: string;
   reminders: ReminderHistoryItem[];
   reminderPreview: {
     clientName: string;
     dueDate: string;
     amountDue: string;
     paymentLink: string | null;
-    subject: string;
-    body: string;
+    previews: {
+      kind: string;
+      label: string;
+      subject: string;
+      body: string;
+    }[];
+    schedule: ReminderScheduleItem[];
   };
 };
 
 export function InvoiceActions({
-  invoiceId,
-  amountDue,
-  initialStatus,
+  invoice,
+  clients,
+  cadence,
+  sendTime,
   reminders,
   reminderPreview,
 }: InvoiceActionsProps) {
@@ -46,8 +65,9 @@ export function InvoiceActions({
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [reminderSent, setReminderSent] = useState(false);
-  const [status, setStatus] = useState(initialStatus ?? "due");
+  const [status, setStatus] = useState(invoice.status ?? "due");
   const [archived, setArchived] = useState(false);
 
   const paid = status === "paid";
@@ -98,13 +118,11 @@ export function InvoiceActions({
     document.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("keydown", handleEscape);
     window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportChange, true);
 
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("keydown", handleEscape);
       window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportChange, true);
     };
   }, [isOpen]);
 
@@ -118,7 +136,7 @@ export function InvoiceActions({
     startTransition(async () => {
       try {
         const formData = new FormData();
-        formData.set("invoice_id", invoiceId);
+        formData.set("invoice_id", invoice.id);
         await sendReminderAction(formData);
         setReminderSent(true);
         closeMenu();
@@ -137,8 +155,8 @@ export function InvoiceActions({
     startTransition(async () => {
       try {
         const formData = new FormData();
-        formData.set("id", invoiceId);
-        formData.set("amount_due", String(amountDue));
+        formData.set("id", invoice.id);
+        formData.set("amount_due", String(invoice.amount_due));
         await markInvoicePaidAction(formData);
         setStatus("paid");
         closeMenu();
@@ -157,7 +175,7 @@ export function InvoiceActions({
     startTransition(async () => {
       try {
         const formData = new FormData();
-        formData.set("id", invoiceId);
+        formData.set("id", invoice.id);
         await closeInvoiceAction(formData);
         setStatus("closed");
         closeMenu();
@@ -176,7 +194,7 @@ export function InvoiceActions({
     startTransition(async () => {
       try {
         const formData = new FormData();
-        formData.set("id", invoiceId);
+        formData.set("id", invoice.id);
         await archiveInvoiceAction(formData);
         setArchived(true);
         closeMenu();
@@ -223,7 +241,20 @@ export function InvoiceActions({
               className="fixed z-[100] min-w-44 rounded-md border border-zinc-200 bg-white p-1 shadow-lg"
               style={{ top: menuPosition.top, left: menuPosition.left }}
             >
-              <ReminderPreviewDialog {...reminderPreview} />
+              {!paid && !closed ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMenu();
+                    setEditOpen(true);
+                  }}
+                  className="w-full rounded-md px-3 py-2 text-left text-sm text-zinc-700 transition hover:bg-zinc-50"
+                >
+                  Edit
+                </button>
+              ) : null}
+
+              <ReminderPreviewDialog {...reminderPreview} reminders={reminders} />
 
               {!paid && !closed ? (
                 <button
@@ -280,16 +311,23 @@ export function InvoiceActions({
                   {isArchiving ? (
                     <span aria-hidden="true" className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-r-transparent" />
                   ) : null}
-                  </button>
-                ) : null}
-
-              <div className="border-t border-zinc-100 pt-1">
-                <ReminderHistoryDialog reminders={reminders} />
-              </div>
+                </button>
+              ) : null}
             </div>,
             document.body,
           )
         : null}
+
+      <InvoiceDialog
+        clients={clients}
+        cadence={cadence}
+        sendTime={sendTime}
+        invoice={invoice}
+        title="Edit invoice"
+        hideTrigger
+        openOnMount={editOpen}
+        onClose={() => setEditOpen(false)}
+      />
     </>
   );
 }

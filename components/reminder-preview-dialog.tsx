@@ -1,15 +1,26 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo, useRef, useState } from "react";
+import { formatDateTime, formatInvoiceDate } from "@/lib/date";
+import type { ReminderScheduleItem } from "@/lib/reminders";
 import { ReminderTemplatePreview } from "@/components/reminder-template-preview";
+import type { ReminderHistoryItem } from "@/components/reminder-history-dialog";
+
+type ReminderPreviewItem = {
+  kind: string;
+  label: string;
+  subject: string;
+  body: string;
+};
 
 type ReminderPreviewDialogProps = {
   clientName: string;
   dueDate: string;
   amountDue: string;
   paymentLink: string | null;
-  subject: string;
-  body: string;
+  previews: ReminderPreviewItem[];
+  schedule: ReminderScheduleItem[];
+  reminders: ReminderHistoryItem[];
 };
 
 export function ReminderPreviewDialog({
@@ -17,10 +28,39 @@ export function ReminderPreviewDialog({
   dueDate,
   amountDue,
   paymentLink,
-  subject,
-  body,
+  previews,
+  schedule,
+  reminders,
 }: ReminderPreviewDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [selectedKind, setSelectedKind] = useState(previews[0]?.kind ?? "soft");
+  const [selectedTab, setSelectedTab] = useState<"upcoming" | "sent">("upcoming");
+  const activePreview = useMemo(
+    () => previews.find((preview) => preview.kind === selectedKind) ?? previews[0],
+    [previews, selectedKind],
+  );
+  const sortedReminders = useMemo(() => {
+    const reminderOrder = ["soft", "firm", "final"];
+
+    function getReminderRank(templateName: string | null | undefined) {
+      const normalizedTemplate = (templateName ?? "").toLowerCase();
+      const matchedIndex = reminderOrder.findIndex((kind) => normalizedTemplate.includes(kind));
+      return matchedIndex === -1 ? reminderOrder.length : matchedIndex;
+    }
+
+    return [...reminders].sort((left, right) => {
+      const rankDifference =
+        getReminderRank(left.template_name) - getReminderRank(right.template_name);
+
+      if (rankDifference !== 0) {
+        return rankDifference;
+      }
+
+      const leftTime = left.sent_at ? new Date(left.sent_at).getTime() : 0;
+      const rightTime = right.sent_at ? new Date(right.sent_at).getTime() : 0;
+      return leftTime - rightTime;
+    });
+  }, [reminders]);
 
   return (
     <>
@@ -29,7 +69,7 @@ export function ReminderPreviewDialog({
         onClick={() => dialogRef.current?.showModal()}
         className="w-full rounded-md px-3 py-2 text-left text-sm text-zinc-700 transition hover:bg-zinc-50"
       >
-        Preview reminder
+        Preview
       </button>
 
       <dialog
@@ -38,7 +78,7 @@ export function ReminderPreviewDialog({
       >
         <div className="space-y-4 p-4">
           <div className="flex items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold">Preview reminder</h2>
+            <h2 className="text-lg font-semibold">Preview</h2>
             <button
               type="button"
               onClick={() => dialogRef.current?.close()}
@@ -80,7 +120,84 @@ export function ReminderPreviewDialog({
             </div>
           </dl>
 
-          <ReminderTemplatePreview subject={subject} body={body} />
+          {previews.length > 1 ? (
+            <div className="grid gap-2 md:grid-cols-3">
+              {previews.map((preview) => (
+                <button
+                  key={preview.kind}
+                  type="button"
+                  onClick={() => setSelectedKind(preview.kind)}
+                  className={[
+                    "w-full rounded-md border px-3 py-2 text-left text-sm transition",
+                    activePreview?.kind === preview.kind
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-900 hover:text-zinc-900",
+                  ].join(" ")}
+                >
+                  {preview.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {activePreview ? (
+            <ReminderTemplatePreview subject={activePreview.subject} body={activePreview.body} />
+          ) : null}
+
+          <div className="rounded-md border border-zinc-200 p-3 text-sm text-zinc-700">
+            <div className="flex items-center gap-2 border-b border-zinc-200 pb-3">
+              <button
+                type="button"
+                onClick={() => setSelectedTab("upcoming")}
+                className={[
+                  "rounded-md px-3 py-1.5 text-sm transition",
+                  selectedTab === "upcoming"
+                    ? "bg-zinc-900 text-white"
+                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
+                ].join(" ")}
+              >
+                Upcoming
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedTab("sent")}
+                className={[
+                  "rounded-md px-3 py-1.5 text-sm transition",
+                  selectedTab === "sent"
+                    ? "bg-zinc-900 text-white"
+                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
+                ].join(" ")}
+              >
+                Sent
+              </button>
+            </div>
+
+            {selectedTab === "upcoming" ? (
+              schedule.length ? (
+                <div className="mt-3 space-y-1.5">
+                  {schedule.map((step) => (
+                    <div key={`${step.kind}-${step.date}`} className="flex items-center justify-between gap-3">
+                      <span>{step.label}</span>
+                      <span className="text-zinc-500">{formatInvoiceDate(step.date)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 text-zinc-500">No reminders are scheduled yet.</p>
+              )
+            ) : sortedReminders.length ? (
+              <div className="mt-3 max-h-[min(32vh,240px)] space-y-1.5 overflow-y-auto pr-1">
+                {sortedReminders.map((reminder) => (
+                  <div key={reminder.id} className="flex items-center justify-between gap-3">
+                    <span>{reminder.template_name ?? "Reminder"}</span>
+                    <span className="text-zinc-500">{formatDateTime(reminder.sent_at)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-zinc-500">We haven&apos;t sent any reminders yet.</p>
+            )}
+          </div>
         </div>
       </dialog>
     </>
