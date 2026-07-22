@@ -213,11 +213,12 @@ export async function upsertInvoiceAction(formData: FormData) {
 
   let sentImmediately = false;
   let immediateSendError: string | null = null;
+  const nextFollowUpAt = payload.next_follow_up_at;
   const shouldSendImmediately =
     Boolean(savedInvoiceId) &&
-    Boolean(payload.next_follow_up_at) &&
+    Boolean(nextFollowUpAt) &&
     !["paid", "closed"].includes(payload.status) &&
-    new Date(payload.next_follow_up_at).getTime() <= Date.now();
+    new Date(nextFollowUpAt).getTime() <= Date.now();
 
   if (shouldSendImmediately && savedInvoiceId) {
     try {
