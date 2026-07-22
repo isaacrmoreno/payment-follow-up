@@ -6,6 +6,8 @@ import { formatInvoiceDate } from "@/lib/date";
 import {
   ensureStarterReminderTemplates,
   getNextReminderKind,
+  getInvoiceReminderCadence,
+  getInvoiceReminderSendTime,
   getReminderCadence,
   getReminderSendTime,
   nextReminderAt,
@@ -62,8 +64,8 @@ export async function sendInvoiceReminderById(
     throw new Error("All scheduled reminders for this invoice have already been sent.");
   }
 
-  const cadence = getReminderCadence(preferences);
-  const sendTime = getReminderSendTime(preferences);
+  const cadence = getInvoiceReminderCadence(invoice, getReminderCadence(preferences));
+  const sendTime = getInvoiceReminderSendTime(invoice, getReminderSendTime(preferences));
   const starterTemplates = await ensureStarterReminderTemplates(supabase, userId);
   const template = starterTemplates.byKind[nextKind];
   if (!template) {
@@ -194,7 +196,7 @@ export async function rescheduleOpenInvoicesForUser(supabase: SupabaseLike, user
     await Promise.all([
       supabase
         .from("invoices")
-        .select("id,due_date,reminder_plan,status")
+        .select("id,due_date,reminder_plan,status,reminder_cadence,reminder_send_time")
         .eq("user_id", userId)
         .not("status", "in", '("paid","closed")'),
       supabase
@@ -217,12 +219,14 @@ export async function rescheduleOpenInvoicesForUser(supabase: SupabaseLike, user
       .eq("invoice_id", invoice.id);
     assertDbError(remindersError, "Unable to load reminder history");
 
+    const lockedCadence = getInvoiceReminderCadence(invoice, cadence);
+    const lockedSendTime = getInvoiceReminderSendTime(invoice, sendTime);
     const nextFollowUpAt = nextReminderAt(
       invoice.due_date,
       parseReminderPlan(invoice.reminder_plan),
       count ?? 0,
-      cadence,
-      sendTime,
+      lockedCadence,
+      lockedSendTime,
     );
 
     const { error: updateError } = await supabase

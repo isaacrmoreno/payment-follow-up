@@ -11,6 +11,8 @@ import {
 import {
   DEFAULT_REMINDER_SEND_TIME,
   ensureStarterReminderTemplates,
+  getInvoiceReminderCadence,
+  getInvoiceReminderSendTime,
   getReminderCadence,
   getReminderSendTime,
   isAllowedReminderSendTime,
@@ -105,6 +107,22 @@ export async function upsertInvoiceAction(formData: FormData) {
   assertDbError(preferencesError, "Unable to load reminder cadence");
   const cadence = getReminderCadence(preferences);
   const sendTime = getReminderSendTime(preferences);
+  let lockedCadence = cadence;
+  let lockedSendTime = sendTime;
+
+  if (id) {
+    const { data: existingInvoice, error: existingInvoiceError } = await supabase
+      .from("invoices")
+      .select("reminder_cadence,reminder_send_time")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    assertDbError(existingInvoiceError, "Unable to load existing invoice");
+
+    lockedCadence = getInvoiceReminderCadence(existingInvoice, cadence);
+    lockedSendTime = getInvoiceReminderSendTime(existingInvoice, sendTime);
+  }
+
   const softTemplate = starterTemplates.byKind.soft;
   if (!softTemplate?.id) {
     throw new Error("Unable to load starter reminder templates.");
@@ -121,14 +139,16 @@ export async function upsertInvoiceAction(formData: FormData) {
     status: String(formData.get("status") ?? "").trim(),
     reminder_template_id: softTemplate.id,
     reminder_plan: reminderPlan,
+    reminder_cadence: lockedCadence,
+    reminder_send_time: lockedSendTime,
     blocker_reason: String(formData.get("blocker_reason") ?? "").trim() || null,
     external_reference: String(formData.get("external_reference") ?? "").trim() || null,
     next_follow_up_at: nextReminderAt(
       String(formData.get("due_date") ?? "").trim(),
       parseReminderPlan(reminderPlan),
       0,
-      cadence,
-      sendTime,
+      lockedCadence,
+      lockedSendTime,
     ),
   };
 

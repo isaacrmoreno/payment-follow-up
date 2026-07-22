@@ -25,6 +25,12 @@ type InvoiceActionsProps = {
     status?: string | null;
     reminder_plan?: string | null;
     external_reference?: string | null;
+    reminder_cadence?: {
+      soft?: number | string | null;
+      firm?: number | string | null;
+      final?: number | string | null;
+    } | null;
+    reminder_send_time?: string | null;
   };
   clients: {
     id: string;

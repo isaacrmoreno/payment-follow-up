@@ -7,6 +7,8 @@ import { formatInvoiceDate } from "@/lib/date";
 import { prioritizeInvoices, remainingBalance, statusLabel } from "@/lib/invoice";
 import { titleCaseWords } from "@/lib/labels";
 import {
+  getInvoiceReminderCadence,
+  getInvoiceReminderSendTime,
   getReminderCadence,
   getReminderSendTime,
   getStarterReminderTemplates,
@@ -77,11 +79,13 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
     const remaining = remainingBalance(invoice);
     const dueDate = formatInvoiceDate(invoice.due_date);
     const clientName = titleCaseWords(invoice.clients?.name ?? "there");
+    const invoiceCadence = getInvoiceReminderCadence(invoice, cadence);
+    const invoiceSendTime = getInvoiceReminderSendTime(invoice, sendTime);
     const reminderSchedule = scheduleReminderPlan(
       invoice.due_date,
       parseReminderPlan(invoice.reminder_plan),
-      cadence,
-      sendTime,
+      invoiceCadence,
+      invoiceSendTime,
     );
     const reminderPreviews = reminderSchedule.map((step) => {
       const template = templatesByKind.get(step.kind) ?? templates[0];

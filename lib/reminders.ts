@@ -7,6 +7,7 @@ export type ReminderCadenceOffsets = {
   firm: number;
   final: number;
 };
+type ReminderCadenceValue = Partial<Record<keyof ReminderCadenceOffsets, number | string | null>>;
 export const DEFAULT_REMINDER_SEND_TIME = "08:30";
 export const REMINDER_SEND_TIME_MIN = "08:00";
 export const REMINDER_SEND_TIME_MAX = "18:00";
@@ -28,6 +29,11 @@ type ReminderPreferencesLike = {
   soft_reminder_days?: number | null;
   firm_reminder_days?: number | null;
   final_reminder_days?: number | null;
+  reminder_send_time?: string | null;
+};
+
+type InvoiceReminderScheduleLike = {
+  reminder_cadence?: ReminderCadenceValue | null;
   reminder_send_time?: string | null;
 };
 
@@ -232,6 +238,47 @@ export function getReminderCadence(preferences?: ReminderPreferencesLike | null)
 
 export function getReminderSendTime(preferences?: ReminderPreferencesLike | null) {
   return normalizeReminderSendTime(preferences?.reminder_send_time);
+}
+
+function toReminderOffset(value: number | string | null | undefined, fallback: number) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
+export function getStoredReminderCadence(
+  storedCadence?: ReminderCadenceValue | null,
+  fallback: ReminderCadenceOffsets = DEFAULT_REMINDER_CADENCE,
+): ReminderCadenceOffsets {
+  return {
+    soft: toReminderOffset(storedCadence?.soft, fallback.soft),
+    firm: toReminderOffset(storedCadence?.firm, fallback.firm),
+    final: toReminderOffset(storedCadence?.final, fallback.final),
+  };
+}
+
+export function getStoredReminderSendTime(
+  storedSendTime?: string | null,
+  fallback = DEFAULT_REMINDER_SEND_TIME,
+) {
+  return normalizeReminderSendTime(storedSendTime ?? fallback);
+}
+
+export function getInvoiceReminderCadence(
+  invoice?: InvoiceReminderScheduleLike | null,
+  fallback: ReminderCadenceOffsets = DEFAULT_REMINDER_CADENCE,
+) {
+  return getStoredReminderCadence(invoice?.reminder_cadence, fallback);
+}
+
+export function getInvoiceReminderSendTime(
+  invoice?: InvoiceReminderScheduleLike | null,
+  fallback = DEFAULT_REMINDER_SEND_TIME,
+) {
+  return getStoredReminderSendTime(invoice?.reminder_send_time, fallback);
 }
 
 export function isAllowedReminderSendTime(value: string) {

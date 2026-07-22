@@ -10,6 +10,8 @@ import { formatInvoiceDate } from "@/lib/date";
 import { titleCaseWords } from "@/lib/labels";
 import {
   type ReminderCadenceOffsets,
+  getInvoiceReminderCadence,
+  getInvoiceReminderSendTime,
   REMINDER_PLAN_OPTIONS,
   parseReminderPlan,
   scheduleReminderPlan,
@@ -30,6 +32,12 @@ type InvoiceDialogInvoice = {
   status?: string | null;
   reminder_plan?: string | null;
   external_reference?: string | null;
+  reminder_cadence?: {
+    soft?: number | string | null;
+    firm?: number | string | null;
+    final?: number | string | null;
+  } | null;
+  reminder_send_time?: string | null;
 };
 
 export function InvoiceDialog({
@@ -65,9 +73,11 @@ export function InvoiceDialog({
   const [amountDue, setAmountDue] = useState(String(invoice?.amount_due ?? "0"));
   const [paymentLink, setPaymentLink] = useState(invoice?.external_reference ?? "");
   const [reminderPlan, setReminderPlan] = useState(invoice?.reminder_plan ?? "soft_firm_final");
+  const effectiveCadence = getInvoiceReminderCadence(invoice, cadence);
+  const effectiveSendTime = getInvoiceReminderSendTime(invoice, sendTime);
 
   const scheduledReminders = dueDate
-    ? scheduleReminderPlan(dueDate, parseReminderPlan(reminderPlan), cadence, sendTime)
+    ? scheduleReminderPlan(dueDate, parseReminderPlan(reminderPlan), effectiveCadence, effectiveSendTime)
     : [];
 
   function resetForm() {
@@ -216,6 +226,12 @@ export function InvoiceDialog({
               ))}
             </select>
           </label>
+
+          {invoice ? (
+            <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600">
+              This invoice uses a locked reminder schedule. Updating your global cadence will not change these reminder dates.
+            </div>
+          ) : null}
 
           <label className="block space-y-2">
             <span className="text-sm font-medium text-zinc-700">External Payment Link</span>
