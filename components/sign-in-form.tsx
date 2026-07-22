@@ -3,10 +3,14 @@
 import { useState, useTransition } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
-export function SignInForm() {
+type SignInFormProps = {
+  initialMessage?: string;
+};
+
+export function SignInForm({ initialMessage = "" }: SignInFormProps) {
   const supabase = createSupabaseBrowserClient();
   const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(initialMessage);
   const [isPending, startTransition] = useTransition();
 
   return (

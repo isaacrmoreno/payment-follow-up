@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServerReadClient } from "@/lib/supabase/server";
 
 export async function getUser() {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServerReadClient();
   const { data } = await supabase.auth.getUser();
   return data.user ?? null;
 }
@@ -10,7 +10,7 @@ export async function getUser() {
 export async function requireUser() {
   const user = await getUser();
   if (!user) {
-    redirect("/");
+    redirect("/?session=expired");
   }
 
   return user;

@@ -2,11 +2,16 @@ import { getUser } from "@/lib/auth";
 import { SignInForm } from "@/components/sign-in-form";
 import { redirect } from "next/navigation";
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ session?: string }>;
+}) {
   const user = await getUser();
+  const params = (await searchParams) ?? {};
 
   if (user) {
-    redirect("/dashboard");
+    redirect("/invoices");
   }
 
   return (
@@ -24,7 +29,13 @@ export default async function HomePage() {
             links without the noise of a full invoicing suite.
           </p>
         </div>
-        <SignInForm />
+        <SignInForm
+          initialMessage={
+            params.session === "expired"
+              ? "Your session expired. Please sign in again."
+              : ""
+          }
+        />
         <p className="text-xs text-zinc-500">
           By continuing you agree to keep your payment follow-up data in this
           workspace.

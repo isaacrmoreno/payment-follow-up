@@ -1,6 +1,6 @@
 "use client";
 
-import { formatPhoneNumber } from "@/lib/format";
+import { formatPhoneNumber } from "@/lib/phone";
 
 type PhoneInputProps = React.InputHTMLAttributes<HTMLInputElement>;
 

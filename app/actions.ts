@@ -36,41 +36,6 @@ export async function signOutAction() {
   revalidatePath("/");
 }
 
-export async function updateProfileAction(formData: FormData) {
-  const user = await requireUser();
-  const supabase = await createSupabaseServerClient();
-  const fullName = String(formData.get("full_name") ?? "").trim() || null;
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      full_name: fullName,
-    })
-    .eq("id", user.id);
-  assertDbError(error, "Unable to update profile");
-
-  revalidatePath("/settings");
-  revalidatePath("/");
-}
-
-export async function updatePreferencesAction(formData: FormData) {
-  const user = await requireUser();
-  const supabase = await createSupabaseServerClient();
-  const payload = {
-    user_id: user.id,
-    business_name: String(formData.get("business_name") ?? "").trim() || null,
-    reply_to_email: String(formData.get("reply_to_email") ?? "").trim() || null,
-    timezone: String(formData.get("timezone") ?? "").trim() || "America/Los_Angeles",
-    reminder_cadence: String(formData.get("reminder_cadence") ?? "").trim() || "manual",
-    follow_up_interval_days: Number(String(formData.get("follow_up_interval_days") ?? "3").trim() || 3),
-    invoice_footer: String(formData.get("invoice_footer") ?? "").trim() || null,
-  };
-
-  const { error } = await supabase.from("user_preferences").upsert(payload);
-  assertDbError(error, "Unable to update preferences");
-  revalidatePath("/settings");
-}
-
 export async function upsertClientAction(formData: FormData) {
   const user = await requireUser();
   const supabase = await createSupabaseServerClient();
@@ -104,7 +69,7 @@ export async function deleteClientAction(formData: FormData) {
     .eq("client_id", id);
 
   if ((count ?? 0) > 0) {
-    throw new Error("Delete the client's invoices first before removing this client.");
+    return;
   }
 
   const { error } = await supabase.from("clients").delete().eq("id", id);
@@ -168,9 +133,55 @@ export async function markInvoicePaidAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/invoices");
+  return { ok: true };
 }
 
-export async function sendReminderAction(formData: FormData): Promise<void> {
+export async function closeInvoiceAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "").trim();
+  const supabase = await createSupabaseServerClient();
+  const user = await requireUser();
+
+  const { error } = await supabase
+    .from("invoices")
+    .update({
+      user_id: user.id,
+      status: "closed",
+      next_follow_up_at: null,
+    })
+    .eq("id", id);
+  assertDbError(error, "Unable to close invoice");
+
+  revalidatePath("/");
+  revalidatePath("/invoices");
+  revalidatePath("/clients");
+  return { ok: true };
+}
+
+export async function archiveInvoiceAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "").trim();
+  const supabase = await createSupabaseServerClient();
+
+  const { data: invoice, error: invoiceError } = await supabase
+    .from("invoices")
+    .select("status")
+    .eq("id", id)
+    .single();
+  assertDbError(invoiceError, "Unable to load invoice");
+
+  if (!invoice || !["paid", "closed"].includes(invoice.status ?? "")) {
+    throw new Error("Close or pay the invoice before archiving it.");
+  }
+
+  const { error } = await supabase.from("invoices").delete().eq("id", id);
+  assertDbError(error, "Unable to archive invoice");
+
+  revalidatePath("/");
+  revalidatePath("/invoices");
+  revalidatePath("/clients");
+  return { ok: true };
+}
+
+export async function sendReminderAction(formData: FormData) {
   const user = await requireUser();
   const invoiceId = String(formData.get("invoice_id") ?? "").trim();
   const supabase = await createSupabaseServerClient();
@@ -233,4 +244,5 @@ export async function sendReminderAction(formData: FormData): Promise<void> {
 
   revalidatePath("/");
   revalidatePath("/invoices");
+  return { ok: true };
 }
