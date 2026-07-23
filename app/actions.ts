@@ -216,7 +216,7 @@ export async function upsertInvoiceAction(formData: FormData) {
   const nextFollowUpAt = payload.next_follow_up_at;
   const shouldSendImmediately =
     Boolean(savedInvoiceId) &&
-    Boolean(nextFollowUpAt) &&
+    nextFollowUpAt !== null &&
     !["paid", "closed"].includes(payload.status) &&
     new Date(nextFollowUpAt).getTime() <= Date.now();
 
